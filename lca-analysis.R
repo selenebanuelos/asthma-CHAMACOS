@@ -5,6 +5,7 @@
 # setup
 library(readstata13)
 library(dplyr)
+library(tidyr)
 library(poLCA) # previously used for LCA
 library(purrr)
 library(stringr)
@@ -102,6 +103,10 @@ asthma %>%
   # view correlation matrix
   .$rho
 # all correlations are >0.5
+# do I need to remove people with only 1 measure??? 
+# some resources state that at least three indicators are required for
+# identifiability. I guess I could do a sensitvity analysis where I include
+# all people (even those with just 1 measure) to see how results differ
 
 # correlation between current asthma sym, current med use, ever asthma diagnosis
 asthma %>%
@@ -137,30 +142,45 @@ asthma %>%
   # view correlation matrix
   .$rho
 
-# check data missingness among analytic sample ---------------------------------
+# ever asthma diagnosis makes me hesitate due to dependece between time points
+# check that ever asthma diagnosis follows the trend no->yes for every person
+# maybe change this from a repeated measure to age of asthma diagnosis? have to 
+# think this through a bit more
 
+# practitioner's guide says to avoid including clinical diagnosis as indicator
+
+# check data missingness among analytic sample ---------------------------------
+# “FIML approaches in LCA handle any ignorable missing data on the indicators of
+# the latent variable, but individuals with missing data on a grouping variable
+# or any covariate in the model are deleted from the analysis”
+# (Collins and Lanza, 2010)
 
 # Rosie's code -----------------------------------------------------------------
 ##Model function
-function_9_18Y <- as.formula(
-  paste("cbind(", 
-        paste(c("current_asthma_9Y",
-                "current_asthma_10Y",
-                "current_asthma_12Y",
-                "current_asthma_14Y",
-                "current_asthma_16Y",
-                "current_asthma_18Y"), 
-              collapse = ","),
-        ") ~ 1")
-  )
+current_asthma_ind <- as.formula(
+  paste(
+    "cbind(", 
+    paste(grep('current_asthma', names(current_asthma), value = TRUE),
+          collapse = ","),
+    ") ~ 1")
+)
+
 # so, we're not using covariates to stimate latent class membership?
 # is ever asthma variable correct?
 
+sym_med_ind <- as.formula(
+  paste(
+    "cbind(", 
+    paste(grep('_sym_|_med_', names(current_asthma), value = TRUE),
+          collapse = ","),
+    ") ~ 1")
+)
+
 #Run models for 2 to 5 classes
 set.seed(1234)
-lca_9_18Y <- lapply(2:5, function(k) {
+model_current_asthma <- lapply(2:5, function(k) {
   message("Currently estimating model with ", k, " classes...")
-  poLCA(function_9_18Y ,
+  poLCA(current_asthma_ind,
         data = current_asthma,
         nclass = k,
         nrep = 100,
@@ -169,19 +189,46 @@ lca_9_18Y <- lapply(2:5, function(k) {
         verbose = FALSE)
 })
 
-#Create the Comparison Table of Models
-lca_2_timepoint <- data.frame(
-  Classes = 2:5,
-  Log_Likelihood = sapply(lca_9_18Y, function(m) round(m$llik, 2)),
-  BIC = sapply(lca_9_18Y, function(m) round(m$bic, 2)),
-  AIC = sapply(lca_9_18Y, function(m) round(m$aic, 2)),
-  Smallest_Class_Pct = sapply(lca_9_18Y, function(m) {
-    round(min(m$P) * 100, 1)
-  })
-)
+set.seed(1234)
+model_sym_med <- lapply(2:5, function(k) {
+  message("Currently estimating model with ", k, " classes...")
+  poLCA(sym_med_ind,
+        data = current_asthma,
+        nclass = k,
+        nrep = 100,
+        maxiter = 5000,
+        na.rm = FALSE,
+        verbose = FALSE)
+})
+
+# Create the Comparison Table of Models
+create_comparison <- function(lca_object_list) {
+  
+  data.frame(
+    Classes = 2:5,
+    Log_Likelihood = sapply(lca_object_list, function(m) round(m$llik, 2)),
+    BIC = sapply(lca_object_list, function(m) round(m$bic, 2)),
+    AIC = sapply(lca_object_list, function(m) round(m$aic, 2)),
+    Smallest_Class_Pct = sapply(lca_object_list, function(m) {round(min(m$P)*100,1)}),
+    Entropy = sapply(lca_object_list, poLCA.entropy)
+  )
+  
+}
 
 #Output results
-print(lca_2_timepoint)
+create_comparison(model_current_asthma)
+create_comparison(model_sym_med)
+# "BIC heavily penalizes the addition of parameters to the model in relation to
+# the sample size, where the larger the sample size, the greater the penalty...
+# Whereas, as n increases, the AIC has a tendency to select more complex models
+# (more classes), as the best fitting, because sample size is not a determining
+# factor in its estimation"
+# (Sinha et al., 2021)
+
+# In LCA, we're hoping to "find a model for which the null hypothesis is not 
+# regected". The larger value of G^2 (the log likelihood), "the more evidence
+# there is against the null hypothesis" (Collins and Lanza, 2010)
+# Therefore, we want a lower log-likelihood?
 
 set.seed(1234)
 two_class <- poLCA(function_9_18Y,
@@ -221,17 +268,27 @@ five_class <- poLCA(function_9_18Y,
 
 # check class sizes - don't want small classes
 # check entropy - higher entropy indicates better class separation
-table(two_class$predclass)
-poLCA.entropy(two_class)
+table(model_current_asthma[[1]]$predclass)
 
-table(three_class$predclass)
-poLCA.entropy(three_class)
+table(model_current_asthma[[2]]$predclass)
 
-table(four_class$predclass)
-poLCA.entropy(four_class)
+table(model_current_asthma[[3]]$predclass)
 
-table(five_class$predclass)
-poLCA.entropy(five_class)
+table(model_current_asthma[[4]]$predclass)
+# all k produce several small classes
+
+table(model_sym_med[[1]]$predclass)
+
+table(model_sym_med[[2]]$predclass)
+
+table(model_sym_med[[3]]$predclass)
+
+table(model_sym_med[[4]]$predclass)
+
+# can also do k-folds cross-validation to select best model 
+
+# need to use multiple random starts to demonstrate sufficient replication
+# of the maximum likelihood
 
 # Visualize trajectories -------------------------------------------------------
 get_probs <- function(age_list) {
