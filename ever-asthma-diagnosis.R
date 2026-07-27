@@ -6,20 +6,22 @@
 library(readstata13)
 library(dplyr)
 library(tidyr)
+library(stringr)
 library(ggplot2)
+library(ggalluvial) # for alluvial plots
 
 # import data ------------------------------------------------------------------
+# asthma related variables in CHAMACOS participants
 asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
                      nonint.factors = TRUE,
                      generate.factors = TRUE)
 
 # data wrangling ---------------------------------------------------------------
+# clean up data on ever asthma diagnosis by doctor
 ever_asthma <- asthma %>%
   # keep asthma related variables only
   select(newid, cham, contains('asth_')) %>%
-  # # remove participants that are missing all data between 9Y-18Y
-  # filter(!if_all(contains(c('9y', '10Y', '12Y', '14Y', '18Y')), is.na)) %>%
-  # make data longer for some data manipulation
+  # make data longer for data manipulation
   pivot_longer(cols = contains('asth_'),
                names_to = c('.value', 'age'),
                names_pattern = '(asth_.*)_([0-9]+Y)$') %>%
@@ -35,23 +37,28 @@ ever_asthma <- asthma %>%
   pivot_wider(id_cols = c(newid, cham),
               names_from = age,
               values_from = c(asth_diag_ever, has_data),
-              names_glue = '{.value}_{age}') %>%
+              names_glue = '{.value}_{age}')
   
 # identify participants with no data from 5Y-18Y
 no_data <- ever_asthma %>%
+  # keep observations with NA across all asth_ever_diag variables
   filter(if_all(contains('asth_'), is.na))
 
 # identify participants with some data from 5Y-18Y
 some_data <- ever_asthma %>%
+  # remove observations with NA across all asth_ever_diag variables
   filter(!if_all(contains('asth_'), is.na)) %>%
+  # make data longer for plotting
   pivot_longer(cols = -c(newid, cham),
                names_to = c('.value', 'age'),
                names_pattern = '(.*)_([0-9]+)') %>%
+  # factor age to control display order in plot
   mutate(age = factor(age, levels = c(5, 7, 9, 10, 12, 14, 16, 18)))
 
 # identify distinct patterns of responses in participants with some data
 # across asth_diag_ever_*Y and has_data*Y
 response_groups_2 <- ever_asthma %>%
+  # remove observations with NA across all asth_ever_diag variables
   filter(!if_all(contains('asth_'), is.na)) %>%
   # remove individual participant IDs
   select(-c(newid, cham)) %>%
@@ -63,7 +70,7 @@ response_groups_2 <- ever_asthma %>%
   pivot_longer(cols = -c(group_id),
                names_to = c('.value', 'age'),
                names_pattern = '(.*)_([0-9]+)') %>%
-  # control order of ages displayed in plot
+  # factor age to control display order in plot
   mutate(age = factor(age, levels = c(5, 7, 9, 10, 12, 14, 16, 18)))
 
 # identify distinct patterns of responses in participants with some data
@@ -80,12 +87,32 @@ response_groups_1 <- ever_asthma %>%
   pivot_longer(cols = -c(group_id),
                names_to = c('.value', 'age'),
                names_pattern = '(.*)_([0-9]+)') %>%
-  # control order of ages displayed in plot
+  # factor age to control display order in plot
   mutate(age = factor(age, levels = c(5, 7, 9, 10, 12, 14, 16, 18)))
+
+# identify transitions over time for alluvial graph
+transitions <- ever_asthma %>%
+  # identify and count all possible transitions that take place in data
+  count(asth_diag_ever_5Y, 
+        asth_diag_ever_7Y,
+        asth_diag_ever_9Y,
+        asth_diag_ever_10Y,
+        asth_diag_ever_14Y,
+        asth_diag_ever_16Y,
+        asth_diag_ever_18Y) %>%
+  # create IDs for each transition pattern
+  mutate(id = row_number()) %>%
+  # make data longer for plotting
+  pivot_longer(cols = contains('asth'),
+               names_to = 'timepoint',
+               values_to = 'response') %>%
+  # clean up time point values and make them numeric ages
+  mutate(age = factor(str_extract(timepoint, '[0-9]+'), 
+                      levels = c('5', '7', '9', '10', '14', '16', '18')))
 
 # identify any participants that have a yes/no response but have no data recorded
 # at given time point or vice versa
-
+# finish this!
 
 # swimmer plots ----------------------------------------------------------------
 # for all individual participants 
@@ -120,6 +147,15 @@ response_groups_1 %>%
 # visually, there doesn't appear to be any Yes -> No ever asthma diagnosis
 # looking for red to green transitions
 
-# can also make different type of transision plot 
-#https://longitudinalanalysis.com/visualizing-transitions-in-time-using-r-and-alluvial-graphs/
 # alluvial graphs --------------------------------------------------------------
+# for all participants
+transitions %>%
+  ggplot(aes(x = age, y = n, stratum = response, fill = response, alluvium = id)) +
+  geom_stratum(alpha = 0.5) +
+  geom_flow() +
+  theme_minimal() +
+  # control colors
+  scale_fill_manual(values = c('No' = 'lightpink',
+                                'Yes' = 'blue'),
+                     na.value = '#E9ECEF')
+# do not have any Yes -> No transitions in ever asthma diagnosis over time
