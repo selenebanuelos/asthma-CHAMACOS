@@ -65,7 +65,7 @@ current_asthma <- asthma %>%
 
 # Correlation of candidate indicators ------------------------------------------
 # correlation between current asthma at different ages
-asthma %>%
+curr_asth_only <- asthma %>%
   # keep asthma related variables only
   dplyr::select(newid, cham, contains('asth_')) %>%
   # remove participants that are missing all data between 9Y-18Y
@@ -98,11 +98,37 @@ asthma %>%
                               asth_diag_ever, 
                               current_asthma),
               names_glue = '{.value}_{age}') %>%
-  dplyr::select(contains('current_asthma')) %>%
+  dplyr::select(contains('current_asthma'))
+
+# tetrachoric correlation - incorrect!
+curr_asth_only %>%
   # calculate tetrachoric correlations
   sirt::tetrachoric2(.) %>%
   # view correlation matrix
-  .$rho
+  .$rho %>%
+  # visualize correlation matrix
+  ggcorrplot(., 
+             method = 'circle', 
+             type = 'upper', 
+             lab = TRUE,
+             circle.scale = 2)
+
+# Pearson correlation
+# in this case (comparing two binary variables) Pearson coefficient equivalent 
+# to phi coefficient/matthews correlation coefficient
+curr_asth_plot <- curr_asth_only %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'complete.obs') %>%
+  # visualize correlation matrix
+  ggcorrplot(., 
+             method = 'circle', 
+             type = 'upper', 
+             lab = TRUE,
+             circle.scale = 2)
+
+ggsave('figures/current_asth_corr.png', curr_asth_plot)
 # all correlations are >0.5
 # do I need to remove people with only 1 measure??? 
 # some resources state that at least three indicators are required for
@@ -157,9 +183,11 @@ models <- lapply(2:5, function(k)
 # function that create the comparison table of models
 compare_fit <- function(model_list) {
   
-  data.frame(
+  comparison <- data.frame(
     Classes = 2:5,
     G2 = sapply(model_list, function(m) round(m$Gsq, 2)),
+    df = sapply(model_list, function(m) m$npar),
+    pvalue = sapply(model_list, function(m) round(pchisq(m$Gsq, df = m$resid.df, lower.tail = FALSE), 4)),
     Log_Likelihood = sapply(model_list, function(m) round(m$llik, 2)),
     BIC = sapply(model_list, function(m) round(m$bic, 2)),
     AIC = sapply(model_list, function(m) round(m$aic, 2)),
@@ -168,10 +196,16 @@ compare_fit <- function(model_list) {
     Entropy = sapply(model_list, poLCA.entropy)
   )
   
+  print(comparison)
+  
+  return(comparison)
+  
 }
 
 # review comparison table for different k
-compare_fit(models)
+model_fit <- compare_fit(models)
+
+write.csv(model_fit, 'data-processed/curr_asth_model_fit.csv', row.names = FALSE)
 # "BIC heavily penalizes the addition of parameters to the model in relation to
 # the sample size, where the larger the sample size, the greater the penalty...
 # Whereas, as n increases, the AIC has a tendency to select more complex models
@@ -187,17 +221,24 @@ compare_fit(models)
 # function that gets respective latent class sizes from each model
 compare_sizes <- function(model) {
 
-  # number of classes assumed
-  k <- length(model$P)
+  #model = models[[1]]
   
-  # respective size of each latent class
-  class_prop <- sort(model$P) %>% round(digits = 2)
+  # counts of predicted class membership, by modal assignment
+  table(model$predclass) %>% 
+    prop.table(.) %>% 
+    round(., digits = 3)
   
-  # labels for each class
-  class_index <- seq(1:k)
-  
-  # named vector of respective latent class sizes
-  setNames(class_prop, class_index)
+  # # number of classes assumed
+  # k <- length(model$P)
+  # 
+  # # respective size of each latent class
+  # class_prop <- sort(model$P) %>% round(digits = 2)
+  # 
+  # # labels for each class
+  # class_index <- seq(1:k)
+  # 
+  # # named vector of respective latent class sizes
+  # setNames(class_prop, class_index)
   
 }
 
@@ -210,69 +251,225 @@ lapply(models, compare_sizes)
 # need to use multiple random starts to demonstrate sufficient replication
 # of the maximum likelihood
 
+# Visualize trajectories -------------------------------------------------------
+# may want to call them 'profiles' since they're not really modeled as
+# longitudinal growth outcomes, and therefore, not continuous trajectories
+
+# function that gets class-conditional outcome probabilities from LCA models
+get_probs <- function(model) {
+
+  # class-conditional outcome probabilities
+  probs <- model$probs
+  
+  # reformat data for plotting
+  reformat <- map_df(probs, # class-conditional outcome probabilities
+                     function(m) as.data.frame(m) %>% 
+                       mutate(class = str_extract(row.names(.), '[0-9]+')), 
+                     .id = 'age') %>%
+    # create column with number of classes assumed (k) for model
+    mutate(k = max(class)) %>%
+    # reformat age variable values from "current_asthma_*Y" to just digits
+    mutate(age = str_extract(age, '[0-9]+'),
+           age = factor(age,levels = c('9', '10', '12', '14', '16', '18')))
+  
+}
+
+# define custom labels for facets in plot below
+facet_names <- c('2' = '2 Classes',
+                 '3' = '3 Classes',
+                 '4' = '4 Classes',
+                 '5' = '5 Classes')
+
+# visualize class profiles of all models in one plot
+spaghetti_all <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
+  ggplot(aes(x = age, # show trend over ages
+             y = `Pr(1)`, # plot probability of having current asthma as outcome
+             color = class # show each class in different color
+             )) +
+  geom_line(aes(group = class), size = 1) +
+  facet_wrap(vars(k), labeller = as_labeller(facet_names)) +
+  labs(y = 'Probability of current asthma') +
+  theme_minimal() +
+  theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
+
+# save
+ggsave('figures/spaghetti-all-traj.png', spaghetti_all)
+
+# visualize class profiles of k=4 model only
+spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
+  # keep only data from k=4 model
+  filter(k == 3) %>%
+  # make spaghetti plot
+  ggplot(aes(x = age, # show trend over ages
+             y = `Pr(1)`, # plot probability of having current asthma as outcome
+             color = class # show each class in different color
+  )) +
+  geom_line(aes(group = class), size = 1) +
+  labs(y = 'Probability of current asthma',
+       title = 'LCA with 3 Classes') +
+  theme_minimal() +
+  theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
+
+# save
+ggsave('figures/spaghetti-k3-traj.png', spaghetti_k3)
+
+# visualize class profiles of k=4 model only
+spaghetti_k4 <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
+  # keep only data from k=4 model
+  filter(k == 4) %>%
+  # make spaghetti plot
+  ggplot(aes(x = age, # show trend over ages
+             y = `Pr(1)`, # plot probability of having current asthma as outcome
+             color = class # show each class in different color
+  )) +
+  geom_line(aes(group = class), size = 1) +
+  labs(y = 'Probability of current asthma',
+       title = 'LCA with 4 Classes') +
+  theme_minimal() +
+  theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
+
+# save
+ggsave('figures/spaghetti-k4-traj.png', spaghetti_k4)
+
 # Check local dependency -------------------------------------------------------
 # 4 class model
-model <- models[[3]]
+model_k4 <- models[[3]]
+model_k3 <- models[[2]]
 
 # get number of classes assumed in the model
-k <- length(model$P)
+#k <- length(model$P)
 
 # function that generates correlation matrix for indicators within each
 
 # calculate correlation matrix between indicators
-pred_classes <- current_asthma %>%
+pred_classes_4 <- current_asthma %>%
   # change all 'Yes' to 1, 'No to 0 for use in sirt::tetrachoric2()
   mutate(across(contains('asth'), ~ case_when(. == 'Yes' ~ 1,
-                                          . == 'No' ~ 0,
-                                          is.na(.) ~ NA))) %>%
+                                              . == 'No' ~ 0,
+                                              is.na(.) ~ NA))) %>%
   # add predicted class memberships to participant data
-  mutate(class = model$predclass)
+  mutate(class = model_k4$predclass)
+
+pred_classes_3 <- current_asthma %>%
+  # change all 'Yes' to 1, 'No to 0 for use in sirt::tetrachoric2()
+  mutate(across(contains('asth'), ~ case_when(. == 'Yes' ~ 1,
+                                              . == 'No' ~ 0,
+                                              is.na(.) ~ NA))) %>%
+  # add predicted class memberships to participant data
+  mutate(class = model_k3$predclass)
 
 # visualize correlation matrix of current_asthma var within each class
-pred_classes %>%
+pred_classes_4 %>%
   filter(class == 1) %>% 
   # keep observations from given class
   dplyr::select(contains('current_asthma')) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
   # visualize correlation matrix
   ggcorrplot(., 
              method = 'circle', 
              type = 'upper', 
-             lab = TRUE)
+             lab = TRUE,
+             circle.scale = 2)
+# undefined due to some variables having no variance (warning: SD = 0)
 
-pred_classes %>%
+pred_classes_4 %>%
+  filter(class == 2) %>% 
+  # keep observatins from given class
+  dplyr::select(contains('current_asthma')) %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
+  # visualize correlation matrix
+  ggcorrplot(., 
+             method = 'circle', 
+             type = 'upper', 
+             lab = TRUE,
+             circle.scale = 2)
+# undefined due to some variables having no variance (warning: SD = 0)
+
+pred_classes_4 %>%
   filter(class == 3) %>% 
   # keep observations from given class
   dplyr::select(contains('current_asthma')) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
   # visualize correlation matrix
   ggcorrplot(., 
              method = 'circle', 
              type = 'upper', 
-             lab = TRUE)
+             lab = TRUE,
+             circle.scale = 2)
+# undefined due to some variables having no variance (warning: SD = 0)
 
-pred_classes %>%
+pred_classes_4 %>%
   filter(class == 4) %>% 
   # keep observations from given class
   dplyr::select(contains('current_asthma')) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
   # visualize correlation matrix
   ggcorrplot(., 
              method = 'circle', 
              type = 'upper', 
-             lab = TRUE)
-# class 2 cannot generate correlation matrix  
+             lab = TRUE,
+             circle.scale = 2)
 
-# visualize correlation matrix of separate asthma vars within each class
+pred_classes_3 %>%
+  filter(class == 1) %>% 
+  # keep observations from given class
+  dplyr::select(contains('current_asthma')) %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
+  # visualize correlation matrix
+  ggcorrplot(., 
+             method = 'circle', 
+             type = 'upper', 
+             lab = TRUE,
+             circle.scale = 2)
+
+pred_classes_3 %>%
+  filter(class == 2) %>% 
+  # keep observations from given class
+  dplyr::select(contains('current_asthma')) %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
+  # visualize correlation matrix
+  ggcorrplot(., 
+             method = 'circle', 
+             type = 'upper', 
+             lab = TRUE,
+             circle.scale = 2)
+# undefined due to some variables having no variance (warning: SD = 0)
+
+pred_classes_3 %>%
+  filter(class == 3) %>% 
+  # keep observations from given class
+  dplyr::select(contains('current_asthma')) %>%
+  # calculate Pearson correlation coefficients for complete cases
+  cor(., 
+      method = 'pearson', # equivalent to phi coefficient in binary case
+      use = 'pairwise.complete.obs') %>%
+  # visualize correlation matrix
+  ggcorrplot(., 
+             method = 'circle', 
+             type = 'upper', 
+             lab = TRUE,
+             circle.scale = 2)
+# undefined due to some variables having no variance (warning: SD = 0)
+
+# visualize correlation matrix of separate asthma vars within each class -------
 pred_classes %>%
   filter(class == 1) %>% 
   # keep observations from given class
@@ -328,31 +525,3 @@ pred_classes %>%
              method = 'circle', 
              type = 'upper', 
              lab = TRUE)
-
-# Visualize trajectories -------------------------------------------------------
-# may want to call them 'profiles' since they're not really modeled as
-# longitudinal growth outcomes, and therefore, not continuous trajectories
-visualize_classes <- function(model) {
-
-  # class-conditional outcome probabilities
-  probs <- model$probs
-  
-  # reformat data for plotting
-  reformat <- map_df(probs, 
-         function(m) as.data.frame(m) %>% mutate(class = str_extract(row.names(.), '[0-9]+')), 
-         .id = 'age') %>%
-    mutate(age = str_extract(age, '[0-9]+'),
-           age = factor(age,levels = c('9', '10', '12', '14', '16', '18')))
-  
-  # plot profiles of class-conditional outcome probabilities over time
-  reformat %>%
-    ggplot(aes(x = age, 
-               y = `Pr(1)`,
-               color = class)) +
-    geom_line(aes(group = class), size = 1) +
-    theme_minimal() +
-    labs(y = 'Probability of current asthma')
-  
-}
-
-lapply(models, visualize_classes)
