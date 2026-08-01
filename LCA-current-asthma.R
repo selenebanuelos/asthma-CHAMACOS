@@ -172,12 +172,44 @@ models <- lapply(2:5, function(k)
   poLCA(current_asthma_ind,
         data = current_asthma,
         nclass = k,
-        nrep = 100, # estimate model 100 times to search for global maximum
+        nrep = 1000, # estimate model 1,000 times to search for global maximum
         maxiter = 5000,
         na.rm = FALSE,
         verbose = FALSE)
   
   })
+
+# Visualize log-likelihood distributions ---------------------------------------
+# gives a sense of model identification-ideally looking for one clear global peak
+
+# vector containing the maximum log-likelihood values found in each of the nrep 
+# attempts to fit the model
+get_loglike <- function(model) {
+  
+  data.frame(
+    # maximum log-likelihood value found at each repeated fit
+    log_like = model$attempts,
+    # number of classes assumed for model fit
+    k = as.character(length(model$P))
+    )
+}
+
+# create footnote to be inlcuded in plot
+footnote <- 'K = 2 model not included since only one value for maximum log-likelihood was obtained over all repeated starts'
+
+# create dataframe of all max log-likelihood values obtained for each model
+map_df(models, get_loglike) %>%
+  # remove model with 2 classes since there is only 1 value obtained
+  filter(k != 2) %>%
+  # plot max log-likelihood distributions to inspect frequency of values
+  ggplot(aes(x = log_like, fill = k)) +
+  geom_histogram(bins = 100) +
+  facet_wrap(~k) +
+  labs(x = 'Maximum log-likelihood',
+       y = 'Count',
+       title = 'Frequency of maximum log-likelihood values over repeated starts',
+       caption = footnote) +
+  theme_minimal()
 
 # Evaluate model fit -----------------------------------------------------------
 # function that create the comparison table of models
@@ -332,24 +364,48 @@ spaghetti_k4 <- map_df(models, get_probs) %>% # get class-conditional outcome pr
 ggsave('figures/spaghetti-k4-traj.png', spaghetti_k4)
 
 # Check local dependency -------------------------------------------------------
-# 4 class model
-model_k4 <- models[[3]]
-model_k3 <- models[[2]]
+# Detect local dependence with bivariate residuals
+remotes::install_github(repo = "quantmeth/poLCAExtra")
+library(poLCAExtra)
 
-# get number of classes assumed in the model
-#k <- length(model$P)
+# poLCA object from k = 3 model
+fit3 <- poLCA(current_asthma_ind,
+                  data = current_asthma,
+                  nclass = 3,
+                  # estimate model 1,000 times to search for global maximum
+                  nrep = 1000, 
+                  maxiter = 5000,
+                  na.rm = FALSE,
+                  verbose = FALSE)
+
+# analysis of residual (also known as Tech10 in Mplus) to investiaget local 
+# independence
+poLCA.residual.pattern(fit3)
+# source code: https://github.com/quantmeth/poLCAExtra/blob/main/R/tech10.R
+# trying to figure out why this isn't working
+
+# covariance matrix
+poLCA.cov(model_k3, nclass = 3)
+
+
+
+
+# Pearson/phi/spearman correlation coefficient is undefined (cov(x,y) = 0, which
+# can't be divided by standard deviations to obtain correlation) when comparing 
+# two vectors in which one of the vectors has all 0's or 1's. Which is the case 
+# in some of the two-way comparison between indicators under predicated class 
+# assignments.
+
+# Can also calculate mutual information values to evaluate dependency between
+# binary variables (not restricted to linear dependence like in Pearson)
+# I think mutual information values can be calculated even when a vector has
+# no variability since MI value calculation does not rely on variability?
+
+
 
 # function that generates correlation matrix for indicators within each
 
 # calculate correlation matrix between indicators
-pred_classes_4 <- current_asthma %>%
-  # change all 'Yes' to 1, 'No to 0 for use in sirt::tetrachoric2()
-  mutate(across(contains('asth'), ~ case_when(. == 'Yes' ~ 1,
-                                              . == 'No' ~ 0,
-                                              is.na(.) ~ NA))) %>%
-  # add predicted class memberships to participant data
-  mutate(class = model_k4$predclass)
-
 pred_classes_3 <- current_asthma %>%
   # change all 'Yes' to 1, 'No to 0 for use in sirt::tetrachoric2()
   mutate(across(contains('asth'), ~ case_when(. == 'Yes' ~ 1,
@@ -358,70 +414,33 @@ pred_classes_3 <- current_asthma %>%
   # add predicted class memberships to participant data
   mutate(class = model_k3$predclass)
 
-# visualize correlation matrix of current_asthma var within each class
-pred_classes_4 %>%
-  filter(class == 1) %>% 
-  # keep observations from given class
-  dplyr::select(contains('current_asthma')) %>%
-  # calculate Pearson correlation coefficients for complete cases
-  cor(., 
-      method = 'pearson', # equivalent to phi coefficient in binary case
-      use = 'pairwise.complete.obs') %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE,
-             circle.scale = 2)
-# undefined due to some variables having no variance (warning: SD = 0)
-
-pred_classes_4 %>%
-  filter(class == 2) %>% 
-  # keep observatins from given class
-  dplyr::select(contains('current_asthma')) %>%
-  # calculate Pearson correlation coefficients for complete cases
-  cor(., 
-      method = 'pearson', # equivalent to phi coefficient in binary case
-      use = 'pairwise.complete.obs') %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE,
-             circle.scale = 2)
-# undefined due to some variables having no variance (warning: SD = 0)
-
-pred_classes_4 %>%
+# calculate mutual information matrix for current_asthma vars within each class
+MI_check <- pred_classes_3 %>%
   filter(class == 3) %>% 
   # keep observations from given class
   dplyr::select(contains('current_asthma')) %>%
-  # calculate Pearson correlation coefficients for complete cases
-  cor(., 
-      method = 'pearson', # equivalent to phi coefficient in binary case
-      use = 'pairwise.complete.obs') %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE,
-             circle.scale = 2)
-# undefined due to some variables having no variance (warning: SD = 0)
+  infotheo::mutinformation(., method = 'emp')
 
-pred_classes_4 %>%
-  filter(class == 4) %>% 
+# get entropy of each variable
+entropy <- pred_classes_3 %>%
+  filter(class == 3) %>% 
   # keep observations from given class
   dplyr::select(contains('current_asthma')) %>%
-  # calculate Pearson correlation coefficients for complete cases
-  cor(., 
-      method = 'pearson', # equivalent to phi coefficient in binary case
-      use = 'pairwise.complete.obs') %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE,
-             circle.scale = 2)
+  apply(., 2, infotheo::entropy, method = 'emp')
+  
+# symmetric normalization of MI value matrix
+norm_mi_sym <- 2 * MI_check / outer(entropy, entropy, '+')
 
+split_check <- pred_classes_3 %>%
+  group_split(class) %>%
+  lapply(., dplyr::select, contains('current_asthma')) %>%
+  lapply(., infotheo::mutinformation, method = 'emp')
+
+pred_classes_3 %>%
+  group_split(class) %>%
+  lapply(., dplyr::select, contains('current_asthma')) %>%
+
+# Pearson correlation
 pred_classes_3 %>%
   filter(class == 1) %>% 
   # keep observations from given class
@@ -468,60 +487,3 @@ pred_classes_3 %>%
              lab = TRUE,
              circle.scale = 2)
 # undefined due to some variables having no variance (warning: SD = 0)
-
-# visualize correlation matrix of separate asthma vars within each class -------
-pred_classes %>%
-  filter(class == 1) %>% 
-  # keep observations from given class
-  dplyr::select(contains(c('asth_'))) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE)
-
-pred_classes %>%
-  filter(class == 2) %>% 
-  # keep observations from given class
-  dplyr::select(contains(c('asth_'))) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE)
-
-pred_classes %>%
-  filter(class == 3) %>% 
-  # keep observations from given class
-  dplyr::select(contains(c('asth_'))) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE)
-
-pred_classes %>%
-  filter(class == 4) %>% 
-  # keep observations from given class
-  dplyr::select(contains(c('asth_'))) %>%
-  # check correlation between current_asthma_*Y variables within each class
-  sirt::tetrachoric2(.) %>%
-  # view correlation matrix
-  .$rho %>%
-  # visualize correlation matrix
-  ggcorrplot(., 
-             method = 'circle', 
-             type = 'upper', 
-             lab = TRUE)
