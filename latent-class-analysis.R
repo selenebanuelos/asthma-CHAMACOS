@@ -142,7 +142,7 @@ asthma %>%
   # view correlation matrix
   .$rho
 
-# ever asthma diagnosis makes me hesitate due to dependece between time points
+# ever asthma diagnosis makes me hesitate due to dependence between time points
 # check that ever asthma diagnosis follows the trend no->yes for every person
 # maybe change this from a repeated measure to age of asthma diagnosis? have to 
 # think this through a bit more
@@ -155,8 +155,8 @@ asthma %>%
 # or any covariate in the model are deleted from the analysis”
 # (Collins and Lanza, 2010)
 
-# Rosie's code -----------------------------------------------------------------
-##Model function
+# latent class analysis --------------------------------------------------------
+# formula: response ~ predictors
 current_asthma_ind <- as.formula(
   paste(
     "cbind(", 
@@ -164,9 +164,8 @@ current_asthma_ind <- as.formula(
           collapse = ","),
     ") ~ 1")
 )
-
-# so, we're not using covariates to stimate latent class membership?
-# is ever asthma variable correct?
+# not using covariates to estimate latent class membership 
+# this means: response ~ 1 in formula above
 
 sym_med_ind <- as.formula(
   paste(

@@ -237,7 +237,7 @@ compare_fit <- function(model_list) {
 # review comparison table for different k
 model_fit <- compare_fit(models)
 
-write.csv(model_fit, 'data-processed/curr_asth_model_fit.csv', row.names = FALSE)
+write.csv(model_fit, 'data-processed/curr_sym_model_fit.csv', row.names = FALSE)
 # "BIC heavily penalizes the addition of parameters to the model in relation to
 # the sample size, where the larger the sample size, the greater the penalty...
 # Whereas, as n increases, the AIC has a tendency to select more complex models
@@ -384,10 +384,73 @@ poLCA.residual.pattern(fit3)
 # source code: https://github.com/quantmeth/poLCAExtra/blob/main/R/tech10.R
 # trying to figure out why this isn't working
 
+# source code copy
+x <- fit3
+
+pc <- x$predcell
+#pattern <- apply(pc[,-((ncol(pc)-1):ncol(pc))],1,paste0, collapse = "")
+
+# get all unique patterns over time of yes/no responses
+pattern <- names(table(apply(x$y,
+                             1, # apply paste0 over rows of matrix
+                             paste0, 
+                             collapse = "")))
+
+npattern <- prod(sapply(apply(x$y, 2, unique, simplify= FALSE), length))
+
+missing.cell <- npattern - length(pattern)
+obs <- pc$observed
+ex <- pc$expected
+z <- (obs-ex)/sqrt(ex)
+p <- pnorm(abs(z), lower.tail = FALSE)
+
 # covariance matrix
 poLCA.cov(model_k3, nclass = 3)
 
+# another try from someone else: 
+# https://gist.github.com/daob/883fbffdff6762c3bb90b3d8d3d0ae6e
+# Author: Daniel Oberski
+# Date: 2017-08-01
 
+# Bivariate residual statistic for latent class analysis
+# Calculate the BVR for poLCA objects
+
+# Argument: a poLCA object
+# Value: a dist object with BVRs
+# Example: bvr(fit)
+
+bvr <- function(fit) {
+  stopifnot(class(fit) == "poLCA")
+  
+  ov_names <- names(fit$predcell)[1:(ncol(fit$predcell) - 2)]
+  ov_combn <- combn(ov_names, 2)
+  
+  get_bvr <- function(ov_pair) {
+    form_obs <- as.formula(paste0("observed ~ ", ov_pair[1], " + ", ov_pair[2]))
+    form_exp <- as.formula(paste0("expected ~ ", ov_pair[1], " + ", ov_pair[2]))
+    
+    counts_obs <- xtabs(form_obs, data = fit$predcell)
+    counts_exp <- xtabs(form_exp, data = fit$predcell)
+    
+    bvr <- sum((counts_obs - counts_exp)^2 / counts_exp)
+    
+    bvr
+  }
+  
+  bvr_pairs <- apply(ov_combn, 2, get_bvr)
+  # names(bvr_pairs) <- apply(ov_combn, 2, paste, collapse = "<->")
+  attr(bvr_pairs, "class") <- "dist"
+  attr(bvr_pairs, "Size") <- length(ov_names)
+  attr(bvr_pairs, "Labels") <- ov_names
+  attr(bvr_pairs, "Diag") <- FALSE
+  attr(bvr_pairs, "Upper") <- FALSE
+  
+  bvr_pairs
+}
+
+# bivariate residuals (Pearson residual in bivariate cross-table)
+check <- bvr(fit3)
+# does not asymptotically follow chi-square distribution
 
 
 # Pearson/phi/spearman correlation coefficient is undefined (cov(x,y) = 0, which
