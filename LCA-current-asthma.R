@@ -60,9 +60,6 @@ current_asthma <- asthma %>%
                               current_asthma),
               names_glue = '{.value}_{age}')
 
-# conditional independence assumption: latent class membership explains all of
-# the shared variance among the observed indicators
-
 # Latent class analysis --------------------------------------------------------
 # formula: response ~ predictors
 current_asthma_ind <- as.formula(
@@ -134,10 +131,7 @@ map_df(models, get_loglike) %>%
 compare_fit <- function(model_list) {
   
   comparison <- data.frame(
-    Classes = 2:5,
-    G2 = sapply(model_list, function(m) round(m$Gsq, 2)),
-    df = sapply(model_list, function(m) m$npar),
-    pvalue = sapply(model_list, function(m) round(pchisq(m$Gsq, df = m$resid.df, lower.tail = FALSE), 4)),
+    Classes = 2:5, 
     Log_Likelihood = sapply(model_list, function(m) round(m$llik, 2)),
     BIC = sapply(model_list, function(m) round(m$bic, 2)),
     AIC = sapply(model_list, function(m) round(m$aic, 2)),
@@ -155,18 +149,12 @@ compare_fit <- function(model_list) {
 # review comparison table for different k
 model_fit <- compare_fit(models)
 
-write.csv(model_fit, 'data-processed/curr_sym_model_fit.csv', row.names = FALSE)
 # "BIC heavily penalizes the addition of parameters to the model in relation to
 # the sample size, where the larger the sample size, the greater the penalty...
 # Whereas, as n increases, the AIC has a tendency to select more complex models
 # (more classes), as the best fitting, because sample size is not a determining
 # factor in its estimation"
 # (Sinha et al., 2021)
-
-# In LCA, we're hoping to "find a model for which the null hypothesis is not 
-# rejected". The larger value of G^2, "the more evidence
-# there is against the null hypothesis" (Collins and Lanza, 2010)
-# Therefore, we want a lower G^2?
 
 # function that gets respective latent class sizes from each model
 compare_sizes <- function(model) {
@@ -280,3 +268,6 @@ spaghetti_k4 <- map_df(models, get_probs) %>% # get class-conditional outcome pr
 
 # save
 ggsave('figures/spaghetti-k4-traj.png', spaghetti_k4)
+
+# output -----------------------------------------------------------------------
+write.csv(model_fit, 'data-processed/curr_sym_model_fit.csv', row.names = FALSE)
