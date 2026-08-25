@@ -305,6 +305,40 @@ quadratic_3 <- gridsearch(
 )
 
 set.seed(123)
+quadratic_4 <- gridsearch(
+  
+  # fit latent class growth model
+  lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
+       mixture = ~ poly(age_years, 2, raw = TRUE),
+       subject = 'newid',
+       link = 'thresholds', # binary outcome
+       ng = 4, # assume k classes
+       data = curr_asth_data
+  ),
+  
+  rep = 100, # try 100 different sets of random initial values
+  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
+  minit = quadratic_1 # 1-class model used to generate random initial values
+)
+
+set.seed(123)
+quadratic_5 <- gridsearch(
+  
+  # fit latent class growth model
+  lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
+       mixture = ~ poly(age_years, 2, raw = TRUE),
+       subject = 'newid',
+       link = 'thresholds', # binary outcome
+       ng = 5, # assume k classes
+       data = curr_asth_data
+  ),
+  
+  rep = 100, # try 100 different sets of random initial values
+  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
+  minit = quadratic_1 # 1-class model used to generate random initial values
+)
+
+set.seed(123)
 cubic_2 <- gridsearch(
   
   # fit latent class growth model
