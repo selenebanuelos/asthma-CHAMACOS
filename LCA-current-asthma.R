@@ -158,25 +158,11 @@ model_fit <- compare_fit(models)
 
 # function that gets respective latent class sizes from each model
 compare_sizes <- function(model) {
-
-  #model = models[[1]]
   
   # counts of predicted class membership, by modal assignment
   table(model$predclass) %>% 
     prop.table(.) %>% 
     round(., digits = 3)
-  
-  # # number of classes assumed
-  # k <- length(model$P)
-  # 
-  # # respective size of each latent class
-  # class_prop <- sort(model$P) %>% round(digits = 2)
-  # 
-  # # labels for each class
-  # class_index <- seq(1:k)
-  # 
-  # # named vector of respective latent class sizes
-  # setNames(class_prop, class_index)
   
 }
 
@@ -184,10 +170,6 @@ compare_sizes <- function(model) {
 lapply(models, compare_sizes)
 
 # all k produce several small classes
-# can also do k-folds cross-validation to select best model 
-
-# need to use multiple random starts to demonstrate sufficient replication
-# of the maximum likelihood
 
 # Visualize trajectories -------------------------------------------------------
 # may want to call them 'profiles' since they're not really modeled as
@@ -230,10 +212,7 @@ spaghetti_all <- map_df(models, get_probs) %>% # get class-conditional outcome p
   theme_minimal() +
   theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
 
-# save
-ggsave('figures/spaghetti-all-traj.png', spaghetti_all)
-
-# visualize class profiles of k=4 model only
+# visualize class profiles of k=3 model only
 spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
   # keep only data from k=4 model
   filter(k == 3) %>%
@@ -248,26 +227,39 @@ spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome pr
   theme_minimal() +
   theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
 
-# save
-ggsave('figures/spaghetti-k3-traj.png', spaghetti_k3)
+# define classes ---------------------------------------------------------------
+# get vector of predicted class membership from 3-class model
+pred_class <- models[[2]]$predclass
 
-# visualize class profiles of k=4 model only
-spaghetti_k4 <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
-  # keep only data from k=4 model
-  filter(k == 4) %>%
-  # make spaghetti plot
-  ggplot(aes(x = age, # show trend over ages
-             y = `Pr(1)`, # plot probability of having current asthma as outcome
-             color = class # show each class in different color
-  )) +
-  geom_line(aes(group = class), size = 1) +
-  labs(y = 'Probability of current asthma',
-       title = 'LCA with 4 Classes') +
-  theme_minimal() +
-  theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
-
-# save
-ggsave('figures/spaghetti-k4-traj.png', spaghetti_k4)
+# define classes for 3-class model
+class_lca_k3 <- data.frame(newid = current_asthma$newid,
+                         pred_class = pred_class) %>%
+  mutate(class_label = case_when(pred_class == 1 ~ 'late onset',
+                                 pred_class == 2 ~ 'never/infrequent',
+                                 pred_class == 3 ~ 'persistent'))
 
 # output -----------------------------------------------------------------------
 write.csv(model_fit, 'data-processed/curr_sym_model_fit.csv', row.names = FALSE)
+
+# trajectories
+ggsave('figures/spaghetti-all-traj.png', spaghetti_all)
+ggsave('figures/spaghetti-k3-traj.png', spaghetti_k3)
+
+# remove unecessary objects
+rm(asthma, 
+   current_asthma, 
+   model_fit, 
+   current_asthma_ind, 
+   facet_names, 
+   footnote, 
+   pred_class,
+   spaghetti_all,
+   spaghetti_k3,
+   compare_fit,
+   compare_sizes,
+   get_loglike,
+   get_probs
+)
+
+# save model fits and classification data
+save.image('data-processed/poLCA.RData')
