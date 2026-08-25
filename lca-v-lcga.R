@@ -4,8 +4,10 @@
 # (LCA) and latent class growth analysis (LCGA)
 
 # setup
+library(readstata13)
 library(dplyr)
 library(lcmm)
+options(scipen = 999)
 
 # import data ------------------------------------------------------------------
 # load LCA objects
@@ -36,18 +38,41 @@ plot_trajectory(linear_2)
 plot_trajectory(linear_3) # lowest BIC
 plot_trajectory(linear_4)
 
+summaryplot(linear_1,
+            linear_2,
+            linear_3,
+            linear_4, 
+            linear_5,
+            which = c('conv', 'AIC', 'BIC', 'entropy')
+)
+
 # quadratic models
 plot_trajectory(quadratic_1)
 plot_trajectory(quadratic_3)
+
+summaryplot(quadratic_1,
+            quadratic_3,
+            which = c('conv', 'AIC', 'BIC', 'entropy')
+)
+            
 
 # cubic models
 plot_trajectory(cubic_1)
 plot_trajectory(cubic_2)
 plot_trajectory(cubic_3)
 
+summaryplot(cubic_1,
+            cubic_2,
+            cubic_3,
+            which = c('conv', 'AIC', 'BIC', 'entropy')
+)
+
 # get vector of predicted class membership for 3-class linear model
-
-
+class_lcga_k3 <- predictClass(linear_3, newdata = curr_asth_data) %>%
+  # label classes (based on trajectory plot)
+  mutate(class_label_lcga = case_when(class == 1 ~ 'never/infrequent',
+                                 class == 2 ~ 'persistent',
+                                 class == 3 ~ 'late onset'))
 
 # Data wrangling ---------------------------------------------------------------
 # do some reformatting to prepare for LCA
@@ -166,3 +191,15 @@ compare_fit <- function(model_list) {
 model_fit <- compare_fit(models)
 
 # compare predicted class membership -------------------------------------------
+comparison <- dplyr::select(classified_k3, newid, class_label) %>% 
+  rename(class_label_lca = class_label) %>%
+  mutate(newid = as.numeric(newid)) %>%
+  full_join(.,
+            dplyr::select(class_lcga_k3, newid, class_label_lcga),
+            by = 'newid') %>%
+  # identify which participants have class memberships that match and don't match
+  mutate(match = case_when(class_label_lca == class_label_lcga ~ 1,
+                           class_label_lca != class_label_lcga ~ 0))
+
+# output -----------------------------------------------------------------------
+write.csv(comparison, 'data-processed/classification_k3.csv', row.names = FALSE)
