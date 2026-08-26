@@ -1,6 +1,8 @@
 # Author: Selene Banuelos
 # Date: 7/15/2026
-# Description: Compare asthma-related variables at different time points
+# Description: Create tables and spaghetti plots to view response frequencies
+# to asthma-related questions over time. Stratified (CHAM1, CHAM2) and
+# unstratified tables were created, along with stratified spaghetti plots
 
 # setup
 library(readstata13)
@@ -17,7 +19,7 @@ asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
                      generate.factors = TRUE)
 
 # data wrangling ---------------------------------------------------------------
-# reformat data to use with gtsummary::tbl_summary()
+# make data long for plotting
 long <- asthma %>%
   # make table with asthma related variables only
   select(newid, cham, contains('asth_')) %>%
@@ -28,13 +30,13 @@ long <- asthma %>%
   # format CHAMACOS cohort label
   mutate(cham = paste0('CHAMACOS ', cham))
 
-# spread data wider
+# spread data wider to use with gtsummary::tbl_summary()
 wide <- long %>%
   pivot_wider(id_cols = c(newid, cham, age),
               names_from = variable,
               values_from = value)
 
-# factor time point variable to control order displayed in table
+# factor time point variable to control order displayed in table and plot
 long$age <- factor(long$age,
                             levels = c('5Y','7Y','9Y','10Y','12Y','14Y','16Y','18Y'))
 
@@ -79,7 +81,7 @@ wide %>%
   # change header to 'Variable'
   modify_header(label = '**Variable**')
 
-# coutns spaghetti plots -------------------------------------------------------
+# counts spaghetti plots -------------------------------------------------------
 # plot 'yes' responses over time for each of 3 vars, stratified by cohort
 long %>%
   group_by(cham, variable, age) %>%
