@@ -16,7 +16,7 @@ library(dplyr)
 
 # import data ------------------------------------------------------------------
 # survey data
-asthma <- read.dta13('data-raw/de_la_Rosa_06.dta',
+asthma <- read.dta13('data-raw/de_la_Rosa_06.dta',# old dataset
                      nonint.factors = TRUE,
                      generate.factors = TRUE)
 
