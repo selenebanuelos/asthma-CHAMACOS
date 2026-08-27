@@ -88,9 +88,10 @@ ind_formula <- as.formula(
 # this means: response ~ 1 in formula above
 
 # estimate models, assuming 2 to 5 classes
-set.seed(1234)
 models <- lapply(1:5, function(k) 
   {
+  
+  set.seed(1234)
   
   # print status message to console
   message("Currently estimating model with ", k, " classes...")
@@ -107,7 +108,7 @@ models <- lapply(1:5, function(k)
   })
 
 # remove unnecessary objects and save model fits
-rm(asthma, current_asthma, analytic_sample, ind_formula, keep_ids)
+rm(asthma, current_asthma, ind_formula, keep_ids)
 save.image('data-processed/lca-current-asthma.RData')
 
 # Visualize max log-likelihood distributions -----------------------------------
@@ -147,7 +148,7 @@ models[c(3, 4, 5)] %>% # remove models with 1 & 2 classes since only 1 value obt
 compare_fit <- function(model_list) {
   
   comparison <- data.frame(
-    Classes = 2:5, 
+    Classes = 1:5, 
     Log_Likelihood = sapply(model_list, function(m) round(m$llik, 2)),
     BIC = sapply(model_list, function(m) round(m$bic, 2)),
     AIC = sapply(model_list, function(m) round(m$aic, 2)),
@@ -209,7 +210,8 @@ get_probs <- function(model) {
 }
 
 # define custom labels for facets in plot below
-facet_names <- c('2' = '2 Classes',
+facet_names <- c('1' = '1 Class',
+                 '2' = '2 Classes',
                  '3' = '3 Classes',
                  '4' = '4 Classes',
                  '5' = '5 Classes')
@@ -242,20 +244,29 @@ spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome pr
   theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
 
 # create class labels ----------------------------------------------------------
-# get vector of predicted class membership from 3-class model
-pred_class_3 <- models[[2]]$predclass
-
-# define classes for 3-class model
-class_lca_k3 <- data.frame(newid = current_asthma$newid,
-                         pred_class = pred_class) %>%
-  mutate(class_label = case_when(pred_class == 1 ~ 'late onset',
-                                 pred_class == 2 ~ 'never/infrequent',
-                                 pred_class == 3 ~ 'persistent'))
+# create class labels for 2 & 3-class models
+class_labels <- data.frame(newid = analytic_sample$newid,
+                           # vectors of predicted class membership from 2 & 3-class models
+                           pred_class_k2 = models[[2]]$predclass,
+                           pred_class_k3 = models[[3]]$predclass
+                           ) %>%
+  mutate(
+    # assign labels for 2-class model based on trajectory patterns
+    class_label_k2 = case_when(pred_class_k2 == 1 ~ 'never/infrequent',
+                               pred_class_k2 == 2 ~ 'persistent'),
+    # assign labels for 3-class model based on trajectory patterns
+    class_label_k3 = case_when(pred_class_k3 == 1 ~ 'persistent',
+                               pred_class_k3 == 2 ~ 'never/infrequent',
+                               pred_class_k3 == 3 ~ 'late onset')
+    )
 
 # output -----------------------------------------------------------------------
 # create csv with fit diagnostics
-write.csv(model_fit, 'data-processed/curr_asth_fit.csv', row.names = FALSE)
+write.csv(model_fit, 'data-processed/fit-stats-lca.csv', row.names = FALSE)
 
 # trajectories
-ggsave('figures/spaghetti-all-traj.png', spaghetti_all)
-ggsave('figures/spaghetti-k3-traj.png', spaghetti_k3)
+ggsave('figures/spaghetti-all-lca.png', spaghetti_all)
+ggsave('figures/spaghetti-k3-lca.png', spaghetti_k3)
+
+# save class labels
+write.csv(class_labels, 'data-processed/class-labels-lca.csv', row.names = FALSE)
