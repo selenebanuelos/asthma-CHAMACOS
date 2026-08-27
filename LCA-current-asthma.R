@@ -75,11 +75,12 @@ keep_ids <- current_asthma %>%
 analytic_sample <- filter(current_asthma, newid %in% keep_ids)
 
 # Latent class analysis --------------------------------------------------------
-# formula: response ~ predictors
-current_asthma_ind <- as.formula(
+# create formula object with current_asthma vars at each timepoint as indicators
+# formula: indicators ~ 1
+ind_formula <- as.formula(
   paste(
     "cbind(", 
-    paste(grep('current_asthma', names(current_asthma), value = TRUE),
+    paste(grep('current_asthma', names(analytic_sample), value = TRUE),
           collapse = ","),
     ") ~ 1")
 )
@@ -88,15 +89,15 @@ current_asthma_ind <- as.formula(
 
 # estimate models, assuming 2 to 5 classes
 set.seed(1234)
-models <- lapply(2:5, function(k) 
+models <- lapply(1:5, function(k) 
   {
   
   # print status message to console
   message("Currently estimating model with ", k, " classes...")
   
   # estimate model
-  poLCA(current_asthma_ind,
-        data = current_asthma,
+  poLCA(formula = ind_formula,
+        data = analytic_sample,
         nclass = k,
         nrep = 1000, # estimate model 1,000 times to search for global maximum
         maxiter = 5000,
@@ -105,11 +106,12 @@ models <- lapply(2:5, function(k)
   
   })
 
-rm(asthma, current_asthma)
-save.image('data-processed/poLCA.RData')
+# remove unnecessary objects and save model fits
+rm(asthma, current_asthma, analytic_sample, ind_formula, keep_ids)
+save.image('data-processed/lca-current-asthma.RData')
 
-# Visualize log-likelihood distributions ---------------------------------------
-# gives a sense of model identification-ideally looking for one clear global peak
+# Visualize max log-likelihood distributions -----------------------------------
+# ideally looking for one clear global peak over the 1,000 random starts
 
 # vector containing the maximum log-likelihood values found in each of the nrep 
 # attempts to fit the model
@@ -183,8 +185,6 @@ compare_sizes <- function(model) {
 # check latent class sizes - don't want small classes
 lapply(models, compare_sizes)
 
-# all k produce several small classes
-
 # Visualize trajectories -------------------------------------------------------
 # may want to call them 'profiles' since they're not really modeled as
 # longitudinal growth outcomes, and therefore, not continuous trajectories
@@ -241,9 +241,9 @@ spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome pr
   theme_minimal() +
   theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
 
-# define classes ---------------------------------------------------------------
+# create class labels ----------------------------------------------------------
 # get vector of predicted class membership from 3-class model
-pred_class <- models[[2]]$predclass
+pred_class_3 <- models[[2]]$predclass
 
 # define classes for 3-class model
 class_lca_k3 <- data.frame(newid = current_asthma$newid,
@@ -253,27 +253,9 @@ class_lca_k3 <- data.frame(newid = current_asthma$newid,
                                  pred_class == 3 ~ 'persistent'))
 
 # output -----------------------------------------------------------------------
-write.csv(model_fit, 'data-processed/curr_sym_model_fit.csv', row.names = FALSE)
+# create csv with fit diagnostics
+write.csv(model_fit, 'data-processed/curr_asth_fit.csv', row.names = FALSE)
 
 # trajectories
 ggsave('figures/spaghetti-all-traj.png', spaghetti_all)
 ggsave('figures/spaghetti-k3-traj.png', spaghetti_k3)
-
-# remove unecessary objects
-rm(asthma, 
-   current_asthma, 
-   model_fit, 
-   current_asthma_ind, 
-   facet_names, 
-   footnote, 
-   pred_class,
-   spaghetti_all,
-   spaghetti_k3,
-   compare_fit,
-   compare_sizes,
-   get_loglike,
-   get_probs
-)
-
-# save model fits and classification data
-save.image('data-processed/poLCA.RData')
