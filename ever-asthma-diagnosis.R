@@ -42,7 +42,7 @@ ever_asthma <- asthma %>%
               values_from = c(asth_diag_ever, has_data),
               names_glue = '{.value}_{age}')
 
-# identify transitions over time for alluvial graph
+# identify all unique transition patterns over time for alluvial graph
 transitions <- ever_asthma %>%
   # identify and count all possible transitions that take place in data
   count(asth_diag_ever_5Y, 
@@ -63,11 +63,17 @@ transitions <- ever_asthma %>%
                       levels = c('5', '7', '9', '10', '14', '16', '18')))
 
 # alluvial graphs --------------------------------------------------------------
-# for all participants
+# show response transition patterns over time for all participants
 transitions %>%
-  ggplot(aes(x = age, y = n, stratum = response, fill = response, alluvium = id)) +
+  ggplot(aes(x = age, 
+             y = n, 
+             stratum = response, 
+             fill = response, 
+             alluvium = id)) +
+  # alluvial plot layers
   geom_stratum(alpha = 0.5) +
   geom_flow() +
+  # formatting
   theme_minimal() +
   # control colors
   scale_fill_manual(values = c('No' = 'lightpink',
