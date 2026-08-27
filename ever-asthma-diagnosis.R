@@ -1,6 +1,9 @@
 # Author: Selene Banuelos
 # Date: 7/24/2026
-# Description:Investigate progression of ever asthma diagnosis variable over time
+# Description:Investigate response frequencies for ever asthma diagnosis over time
+# Since this is an ever/never-type question, want to make sure responses all
+# follow no -> yes patterns over time. Checking to make sure no one has any
+# yes -> no patterns
 
 # setup
 library(readstata13)
@@ -21,7 +24,7 @@ asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
 ever_asthma <- asthma %>%
   # keep asthma related variables only
   select(newid, cham, contains('asth_')) %>%
-  # make data longer for data manipulation
+  # make data longer for easier data manipulation
   pivot_longer(cols = contains('asth_'),
                names_to = c('.value', 'age'),
                names_pattern = '(asth_.*)_([0-9]+Y)$') %>%
@@ -38,22 +41,6 @@ ever_asthma <- asthma %>%
               names_from = age,
               values_from = c(asth_diag_ever, has_data),
               names_glue = '{.value}_{age}')
-  
-# identify participants with no data from 5Y-18Y
-no_data <- ever_asthma %>%
-  # keep observations with NA across all asth_ever_diag variables
-  filter(if_all(contains('asth_'), is.na))
-
-# identify participants with some data from 5Y-18Y
-some_data <- ever_asthma %>%
-  # remove observations with NA across all asth_ever_diag variables
-  filter(!if_all(contains('asth_'), is.na)) %>%
-  # make data longer for plotting
-  pivot_longer(cols = -c(newid, cham),
-               names_to = c('.value', 'age'),
-               names_pattern = '(.*)_([0-9]+)') %>%
-  # factor age to control display order in plot
-  mutate(age = factor(age, levels = c(5, 7, 9, 10, 12, 14, 16, 18)))
 
 # identify distinct patterns of responses in participants with some data
 # across asth_diag_ever_*Y and has_data*Y
