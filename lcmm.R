@@ -53,41 +53,6 @@ current_asthma <- asthma %>%
          newid = as.numeric(newid))
 
 # fit latent class mixture model -----------------------------------------------
-# define model fitting function
-fit_lcmm <- function(k, # number of assumed classes
-                     formula, 
-                     mix,
-                     m # previously fit 1-class model for starting values
-                     ){ 
-
-  # send status message to console
-  message("Currently estimating model with ", k, " classes...")
-  
-  # print status message to console (for sink)
-  print(paste0('Estimating model with ', k, ' classes'))
-  
-  set.seed(123) # for reproducibility
-  
-  # use gridsearch() to try random sets of initial values
-  gridsearch(
-    
-    # fit latent class growth model
-    lcmm(fixed = formula,
-         mixture = mix,
-         #random = ~ age_years, # no within-class random effects (latent class growth analysis)
-         subject = 'newid',
-         link = 'thresholds', # binary outcome
-         ng = k, # assume k classes
-         data = curr_asth_data
-         ),
-    
-    rep = 100, # try 100 different sets of random initial values
-    maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-    minit = m # 1-class model used to generate random initial values
-  )
-  
-  }
-
 # save any console output to text file (warnings, messages, etc.)
 sink('data-processed/lcmm-console.txt')
 
@@ -101,113 +66,15 @@ linear_1 <- lcmm(fixed = current_asthma ~ age_years,
                  data = curr_asth_data
                  )
 
-linear_models <- lapply(2:5, 
-                        fit_lcmm, 
-                        as.formula(current_asthma ~ age_years), 
-                        as.formula(~ age_years),
-                        linear_1)
-
-# fit a 1-class quadratic model for starting values
-set.seed(123)
-quadratic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
-                    # mixture not specified for 1 class models
-                    subject = 'newid',
-                    link = 'thresholds', # binary outcome
-                    ng = 1, # 1 class model
-                    data = curr_asth_data
-                    )
-
-# fit quadratic models with 2-5 classes, using starting values from 1-class model
-quadratic_models <- lapply(2:5, 
-                           fit_lcmm, 
-                           as.formula(current_asthma ~ poly(age_years, 2, raw = TRUE)), 
-                           as.formula(~ poly(age_years, 2, raw = TRUE)),
-                           quadratic_1
-                           )
-
-# fit a 1-class quadratic model for starting values
-set.seed(123)
-cubic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 3, raw = TRUE),
-                # mixture not specified for 1 class models
-                subject = 'newid',
-                link = 'thresholds', # binary outcome
-                ng = 1, # 1 class model
-                data = curr_asth_data,
-                maxiter = 1000
-)
-
-# fit cubic models with 2-5 classes, using starting values from 1-class model
-cubic_models <- lapply(2:5, 
-                       fit_lcmm, 
-                       as.formula(current_asthma ~ poly(age_years, 3, raw = TRUE)), 
-                       as.formula(~ poly(age_years, 3, raw = TRUE)),
-                       cubic_1
-)
-
-# stop sinking
-sink(NULL)
-
-# post-fit summaries -----------------------------------------------------------
-summary_table <- function(model) {
-  
-  # lcmm::summarytable() source code to calculate entropy
-  entropy <- function(x)
-  {
-    z <- log(as.matrix(x$pprob[,c(3:(x$ng+2))]))*as.matrix(x$pprob[,c(3:(x$ng+2))])
-    if(any(!is.finite(z)))
-    {
-      z[which(!is.finite(z))] <- 0
-    }
-    res <- 1+sum(z)/(x$ns*log(x$ng))
-    if(x$ng==1) res <- 1
-    return(res)
-  }
-  
-  # calculate entropy
-  e <- entropy(model)
-  
-  # class membership proportions
-  class_props <- model$pprob %>%
-    group_by(class) %>%
-    summarize(prop = n() / nrow(.) * 100) %>%
-    pivot_wider(names_from = class,
-                names_glue = '%class{class}',
-                values_from = prop)
-  
-  # combine all stats into summary 
-  data.frame(k = model$ng,
-             entropy = e,
-             conv = model$conv,
-             AIC = model$AIC,
-             BIC = model$BIC) %>%
-    cbind(class_props)
-
-}
-
-# name each list of models with functional form
-linear_models <- set_names(linear_models, 'linear')
-quadratic_models <- set_names(quadratic_models, 'quadratic')
-cubic_models <- set_names(cubic_models, 'cubic')
-
-# create summary data frame for all models
-summaries <- rbind(
-  map_df(linear_models, summary_table, .id = 'type'),
-  map_df(quadratic_models, summary_table, .id = 'type'),
-  map_df(cubic_models, summary_table, .id = 'type')
-) %>%
-  group_by(type) %>%
-  # sort by ascending BIC
-  arrange(BIC, .by_group = TRUE)
-
-# plot trajectories ------------------------------------------------------------
-# refit desired models, having trouble plotting from list of models
-# use gridsearch() to try random sets of initial values
+# fit linear 2-5 class models, using gridsearch() to try random sets of initial 
+# values and 1-class model for starting values
 set.seed(123)
 linear_2 <- gridsearch(
   
   # fit latent class growth model
   lcmm(fixed = current_asthma ~ age_years,
        mixture = ~ age_years,
+       #random = ~ age_years, # no within-class random effects (latent class growth analysis)
        subject = 'newid',
        link = 'thresholds', # binary outcome
        ng = 2, # assume k classes
@@ -270,8 +137,16 @@ linear_5 <- gridsearch(
   minit = linear_1 # 1-class model used to generate random initial values
 )
 
-# save fitted models
-save.image('data-processed/lcmm.RData')
+
+# fit a 1-class quadratic model for starting values
+set.seed(123)
+quadratic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
+                    # mixture not specified for 1 class models
+                    subject = 'newid',
+                    link = 'thresholds', # binary outcome
+                    ng = 1, # 1 class model
+                    data = curr_asth_data
+                    )
 
 set.seed(123)
 quadratic_2 <- gridsearch(
@@ -341,6 +216,17 @@ quadratic_5 <- gridsearch(
   minit = quadratic_1 # 1-class model used to generate random initial values
 )
 
+# fit a 1-class quadratic model for starting values
+set.seed(123)
+cubic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 3, raw = TRUE),
+                # mixture not specified for 1 class models
+                subject = 'newid',
+                link = 'thresholds', # binary outcome
+                ng = 1, # 1 class model
+                data = curr_asth_data,
+                maxiter = 1000
+)
+
 set.seed(123)
 cubic_2 <- gridsearch(
   
@@ -375,14 +261,75 @@ cubic_3 <- gridsearch(
   minit = cubic_1 # 1-class model used to generate random initial values
 )
 
+# stop sinking
+sink(NULL)
+
+# refit desired models, having trouble plotting from list of models
+
+# save fitted models
+save.image('data-processed/lcmm.RData')
+
+# post-fit summaries -----------------------------------------------------------
+summary_table <- function(model) {
+  
+  # lcmm::summarytable() source code to calculate entropy
+  entropy <- function(x)
+  {
+    z <- log(as.matrix(x$pprob[,c(3:(x$ng+2))]))*as.matrix(x$pprob[,c(3:(x$ng+2))])
+    if(any(!is.finite(z)))
+    {
+      z[which(!is.finite(z))] <- 0
+    }
+    res <- 1+sum(z)/(x$ns*log(x$ng))
+    if(x$ng==1) res <- 1
+    return(res)
+  }
+  
+  # calculate entropy
+  e <- entropy(model)
+  
+  # class membership proportions
+  class_props <- model$pprob %>%
+    group_by(class) %>%
+    summarize(prop = n() / nrow(.) * 100) %>%
+    pivot_wider(names_from = class,
+                names_glue = '%class{class}',
+                values_from = prop)
+  
+  # combine all stats into summary 
+  data.frame(k = model$ng,
+             entropy = e,
+             conv = model$conv,
+             AIC = model$AIC,
+             BIC = model$BIC) %>%
+    cbind(class_props)
+  
+}
+
+# name each list of models with functional form
+linear_models <- set_names(linear_models, 'linear')
+quadratic_models <- set_names(quadratic_models, 'quadratic')
+cubic_models <- set_names(cubic_models, 'cubic')
+
+# create summary data frame for all models
+summaries <- rbind(
+  map_df(linear_models, summary_table, .id = 'type'),
+  map_df(quadratic_models, summary_table, .id = 'type'),
+  map_df(cubic_models, summary_table, .id = 'type')
+) %>%
+  group_by(type) %>%
+  # sort by ascending BIC
+  arrange(BIC, .by_group = TRUE)
+
+# plot trajectories ------------------------------------------------------------
 plot_trajectory <- function(model){
-
+  
   ages <- data.frame(age_years = c(9, 10, 12, 14, 16, 18))
-
+  
   pred_class <- predictY(model, ages, var.time = 'age_years', draws = TRUE)
-
+  
   plot(pred_class)
-
+  
 }
 
 plot_trajectory(linear_3)
