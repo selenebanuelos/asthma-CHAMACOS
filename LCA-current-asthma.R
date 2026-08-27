@@ -126,12 +126,12 @@ get_loglike <- function(model) {
 }
 
 # create footnote to be inlcuded in plot
-footnote <- 'K = 2 model not included since only one value for maximum log-likelihood was obtained over all repeated starts'
+footnote <- 'K = 1 & K = 2 models not included since only one value for maximum log-likelihood was obtained over all repeated starts'
 
 # create dataframe of all max log-likelihood values obtained for each model
-map_df(models, get_loglike) %>%
-  # remove model with 2 classes since there is only 1 value obtained
-  filter(k != 2) %>%
+models[c(3, 4, 5)] %>% # remove models with 1 & 2 classes since only 1 value obtained
+  # extract vectors of max log-likelihoods found for each model
+  map_df(., get_loglike) %>%
   # plot max log-likelihood distributions to inspect frequency of values
   ggplot(aes(x = log_like, fill = k)) +
   geom_histogram(bins = 100) +
