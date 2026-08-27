@@ -19,35 +19,38 @@ asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
                      generate.factors = TRUE)
 
 # data wrangling ---------------------------------------------------------------
-# do some reformatting to prepare for LCA
-curr_asth_data <- asthma %>%
+# create analytic sample
+current_asthma <- asthma %>%
   # keep asthma related variables only
   dplyr::select(newid, cham, contains('asth_')) %>%
   # remove participants that are missing all data between 9Y-18Y
   filter(!if_all(contains(c('9y', '10Y', '12Y', '14Y', '18Y')), is.na)) %>%
-  # make data longer for some data manipulation
+  # make data longer for some data manipulation & use with lcmm()
   pivot_longer(cols = contains('asth_'),
                names_to = c('.value', 'age'),
                names_pattern = '(asth_.*)_([0-9]+Y)$') %>%
   # remove data from ages 5 and 7
   filter(age != '5Y' & age != '7Y') %>%
-  # remove data from participants with only 1 visit (can't create trajectory?)
-  group_by(newid) %>%
-  filter(n_distinct(age) > 1) %>%
-  ungroup() %>%
   # create a 'current asthma' variable for each timepoint
   # current asthma defined as 2/3 of the following: current asthma symptoms, 
   # current asthma medication, ever asthma diagnosis
   # asth_symed = current asthma symptoms OR current asthma medication use
-  mutate(
-    current_asthma = case_when(
-      asth_symed == 'Yes' & asth_diag_ever == 'Yes' ~ 1, # yes
-      asth_symed == 'No' | asth_diag_ever == 'No' ~ 0, # no
-      is.na(asth_symed) | is.na(asth_diag_ever) ~ NA),
-    age_years = as.numeric(str_remove(age, 'Y')),
-    # change subject ID to numeric to use with lcmm()
-    newid = as.numeric(newid)
-    ) 
+  mutate(current_asthma = case_when(
+    asth_symed == 'Yes' & asth_diag_ever == 'Yes' ~ 1, # yes
+    asth_symed == 'No' | asth_diag_ever == 'No' ~ 0, # no
+    is.na(asth_symed) | is.na(asth_diag_ever) ~ NA)) %>%
+  # remove original asthma variables and keep only current_asthma
+  dplyr::select(-contains('asth_')) %>%
+  # remove any observations missing a current asthma value
+  filter(!is.na(current_asthma)) %>%
+  # remove data from participants with only 1 visit
+  group_by(newid) %>%
+  filter(n_distinct(age) > 1) %>%
+  ungroup() %>%
+  # create numeric age variable to use with lcmm()
+  mutate(age_years = as.numeric(str_remove(age, 'Y')), 
+         # change subject ID to numeric to use with lcmm()
+         newid = as.numeric(newid))
 
 # fit latent class mixture model -----------------------------------------------
 # define model fitting function
