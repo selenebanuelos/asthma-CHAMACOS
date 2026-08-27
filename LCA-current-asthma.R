@@ -20,7 +20,7 @@ asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
                      generate.factors = TRUE)
 
 # Data wrangling ---------------------------------------------------------------
-# do some reformatting to prepare for LCA
+# create current asthma variable
 current_asthma <- asthma %>%
   # keep asthma related variables only
   dplyr::select(newid, cham, contains('asth_')) %>%
@@ -32,10 +32,6 @@ current_asthma <- asthma %>%
                names_pattern = '(asth_.*)_([0-9]+Y)$') %>%
   # remove data from ages 5 and 7
   filter(age != '5Y' & age != '7Y') %>%
-  # remove data from participants with only 1 visit (can't create trajectory?)
-  group_by(newid) %>%
-  filter(n_distinct(age) > 1) %>%
-  ungroup() %>%
   # create a 'current asthma' variable for each timepoint
   # current asthma defined as 2/3 of the following: current asthma symptoms, 
   # current asthma medication, ever asthma diagnosis
@@ -60,6 +56,15 @@ current_asthma <- asthma %>%
                               current_asthma),
               names_glue = '{.value}_{age}')
 
+# check if any participants have data at only 1 visit
+group_by(newid)
+
+# remove data from participants with only 1 visit
+# skeptical of using only 1 data point to evaluate a trajectory
+group_by(newid) %>%
+  filter(n_distinct(age) > 1) %>%
+  ungroup() %>%
+  
 # Latent class analysis --------------------------------------------------------
 # formula: response ~ predictors
 current_asthma_ind <- as.formula(
