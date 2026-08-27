@@ -54,15 +54,26 @@ current_asthma <- asthma %>%
               values_from = current_asthma,
               names_glue = '{.value}_{age}')
 
-# check if any participants have data at only 1 visit
-group_by(newid)
-
-# remove data from participants with only 1 visit
+# check if any participants have data at only 1 timepoint 
 # skeptical of using only 1 data point to evaluate a trajectory
-group_by(newid) %>%
+keep_ids <- current_asthma %>%
+  # make data longer 
+  pivot_longer(cols = contains('current_asthma'),
+               names_pattern = '(current_asthma)_([0-9]+Y)$', 
+               names_to = c('.value', 'age')) %>%
+  # remove any observations missing a current asthma value
+  filter(!is.na(current_asthma)) %>%
+  # remove data from participants with only 1 visit
+  group_by(newid) %>%
   filter(n_distinct(age) > 1) %>%
   ungroup() %>%
+  # get IDs of all participants with >1 timepoint
+  pull(newid) %>%
+  unique()
   
+# create analytic sample df, with participants with >1 timepoint
+analytic_sample <- filter(current_asthma, newid %in% keep_ids)
+
 # Latent class analysis --------------------------------------------------------
 # formula: response ~ predictors
 current_asthma_ind <- as.formula(
