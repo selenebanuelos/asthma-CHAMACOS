@@ -46,14 +46,12 @@ current_asthma <- asthma %>%
                             levels = c(1, 0),
                             labels = c('Yes', 'No')
                             )) %>%
+  # remove original asthma variables and keep only current_asthma
+  dplyr::select(-contains('asth_')) %>%
   # make data wider to use with poLCA::poLCA()
   pivot_wider(id_cols = c('newid', 'cham'),
               names_from = age,
-              values_from = c(asth_sym, 
-                              asth_symed, 
-                              asth_med, 
-                              asth_diag_ever, 
-                              current_asthma),
+              values_from = current_asthma,
               names_glue = '{.value}_{age}')
 
 # check if any participants have data at only 1 visit
