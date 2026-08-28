@@ -20,7 +20,7 @@ asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
 
 # data wrangling ---------------------------------------------------------------
 # create analytic sample
-current_asthma <- asthma %>%
+analytic_sample <- asthma %>%
   # keep asthma related variables only
   dplyr::select(newid, cham, contains('asth_')) %>%
   # remove participants that are missing all data between 9Y-18Y
@@ -52,92 +52,76 @@ current_asthma <- asthma %>%
          # change subject ID to numeric to use with lcmm()
          newid = as.numeric(newid))
 
-# fit latent class mixture model -----------------------------------------------
+# define function factory ------------------------------------------------------
+# function factory to create model-fitting functions with specified n-degree polynomial
+degree <- function(n # specified degree of polynomial
+                   ) {
+  
+  # ensure evaluation of n when inner function is executed
+  force(n) # recommended in (Wickham, 2015)
+  
+  function(k, # assume k classes
+           init_fit # 1-class model with same fixed formula
+           ) {
+    
+    # print status message to console (for sink)
+    print(paste0('Fitting ',n,'-degree model with ', k, ' classes'))
+    
+    # create formula objects to pass into fixed and mixture arguments of lcmm()
+    # that incorporate specified degree of polynomial, n
+    fixed_form <- as.formula(paste0('current_asthma ~ poly(age_years, ',n, ', raw = TRUE)'))
+    mix_form <- as.formula(paste0('~ poly(age_years, ',n, ', raw = TRUE)'))
+    
+    set.seed(123)
+    
+    # use gridsearch() to re-fit model using different random sets of inital
+    # values to reduce odds of converging to local maximum
+    gridsearch(
+      
+      # fit latent class growth model
+      lcmm(fixed = fixed_form,
+           mixture = mix_form,
+           subject = 'newid',
+           link = 'thresholds', # binary outcome
+           ng = k,
+           data = analytic_sample),
+      
+      rep = 100, # try 100 different sets of random initial values
+      maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
+      minit = init_fit # 1-class model used to generate random initial values
+      )
+    }
+  }
+
+# linear LCG models ------------------------------------------------------------
 # save any console output to text file (warnings, messages, etc.)
-sink('data-processed/lcmm-console.txt')
+sink('data-processed/lcmm-console-output.txt', append = TRUE)
 
 # fit a 1 class linear model to obtain starting values
+print('Fitting 1-degree model with 1 class') # print for console output log
+
 set.seed(123)
-linear_1 <- lcmm(fixed = current_asthma ~ age_years,
+linear_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 1, raw = TRUE),
                  # mixture not specified for 1 class models
                  subject = 'newid',
                  link = 'thresholds', # binary outcome
                  ng = 1, # 1 class model
-                 data = curr_asth_data
+                 data = analytic_sample
                  )
 
-# fit linear 2-5 class models, using gridsearch() to try random sets of initial 
-# values and 1-class model for starting values
-set.seed(123)
-linear_2 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ age_years,
-       mixture = ~ age_years,
-       #random = ~ age_years, # no within-class random effects (latent class growth analysis)
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 2, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = linear_1 # 1-class model used to generate random initial values
-)
+# create function that fits linear model (1-degree polynomial)
+linear_model <- degree(1)
 
-set.seed(123)
-linear_3 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ age_years,
-       mixture = ~ age_years,
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 3, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = linear_1 # 1-class model used to generate random initial values
-)
+# fit linear 2-5 class models
+linear_2 <- linear_model(k = 2, init_fit = linear_1)
+linear_3 <- linear_model(3, linear_1)
+linear_4 <- linear_model(4, linear_1)
+linear_5 <- linear_model(5, linear_1)
 
-set.seed(123)
-linear_4 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ age_years,
-       mixture = ~ age_years,
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 4, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = linear_1 # 1-class model used to generate random initial values
-)
+# close the file connection
+sink()
 
-set.seed(123)
-linear_5 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ age_years,
-       mixture = ~ age_years,
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 5, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = linear_1 # 1-class model used to generate random initial values
-)
-
-
+# quadratic LCG models ---------------------------------------------------------
 # fit a 1-class quadratic model for starting values
 set.seed(123)
 quadratic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
@@ -261,8 +245,6 @@ cubic_3 <- gridsearch(
   minit = cubic_1 # 1-class model used to generate random initial values
 )
 
-# stop sinking
-sink(NULL)
 
 # refit desired models, having trouble plotting from list of models
 
