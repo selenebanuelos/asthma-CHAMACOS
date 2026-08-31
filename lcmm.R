@@ -61,10 +61,14 @@ degree <- function(n # specified degree of polynomial
   force(n) # recommended in (Wickham, 2015)
   
   function(k, # assume k classes
-           init_fit # 1-class model with same fixed formula
+           init_fit, # 1-class model with same fixed formula
+           df = analytic_sample
            ) {
     
-    # print status message to console (for sink)
+    # send status message to console
+    message("Currently estimating model with ", k, " classes...")
+    
+    # print status message for sink()
     print(paste0('Fitting ',n,'-degree model with ', k, ' classes'))
     
     # create formula objects to pass into fixed and mixture arguments of lcmm()
@@ -84,7 +88,7 @@ degree <- function(n # specified degree of polynomial
            subject = 'newid',
            link = 'thresholds', # binary outcome
            ng = k,
-           data = analytic_sample),
+           data = df),
       
       rep = 100, # try 100 different sets of random initial values
       maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
@@ -122,83 +126,33 @@ linear_5 <- linear_model(5, linear_1)
 sink()
 
 # quadratic LCG models ---------------------------------------------------------
-# fit a 1-class quadratic model for starting values
+# save any console output to text file (warnings, messages, etc.)
+sink('data-processed/lcmm-console-output.txt', append = TRUE)
+
+# fit a 1 class linear model to obtain starting values
+print('Fitting 2-degree model with 1 class') # print for console output log
+
 set.seed(123)
 quadratic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
-                    # mixture not specified for 1 class models
-                    subject = 'newid',
-                    link = 'thresholds', # binary outcome
-                    ng = 1, # 1 class model
-                    data = curr_asth_data
-                    )
-
-set.seed(123)
-quadratic_2 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
-       mixture = ~ poly(age_years, 2, raw = TRUE),
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 2, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = quadratic_1 # 1-class model used to generate random initial values
+                 # mixture not specified for 1 class models
+                 subject = 'newid',
+                 link = 'thresholds', # binary outcome
+                 ng = 1, # 1 class model
+                 data = analytic_sample
 )
 
-set.seed(123)
-quadratic_3 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
-       mixture = ~ poly(age_years, 2, raw = TRUE),
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 3, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = quadratic_1 # 1-class model used to generate random initial values
-)
+# create function that fits quadratic model (2-degree polynomial)
+quadratic_model <- degree(2)
 
-set.seed(123)
-quadratic_4 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
-       mixture = ~ poly(age_years, 2, raw = TRUE),
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 4, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = quadratic_1 # 1-class model used to generate random initial values
-)
+# fit linear 2-5 class models
+quadratic_2 <- quadratic_model(k = 2, init_fit = quadratic_1)
+quadratic_3 <- quadratic_model(3, quadratic_1)
+quadratic_4 <- quadratic_model(4, quadratic_1)
+quadratic_5 <- quadratic_model(5, quadratic_1)
 
-set.seed(123)
-quadratic_5 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ poly(age_years, 2, raw = TRUE),
-       mixture = ~ poly(age_years, 2, raw = TRUE),
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 5, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = quadratic_1 # 1-class model used to generate random initial values
-)
+# close the file connection
+sink()
+
 
 # fit a 1-class quadratic model for starting values
 set.seed(123)
