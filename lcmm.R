@@ -1,7 +1,6 @@
 # Author: Selene Banuelos
 # Date: 8/11/2026
-# Description: Repeat measures latent class analysis and latent growth curve
-# analysis using lcmm R package
+# Description: Latent growth curve analysis using lcmm R package
 
 # setup
 library(readstata13)
@@ -191,56 +190,34 @@ sink()
 save.image('data-processed/lcmm.RData')
 
 # post-fit summaries -----------------------------------------------------------
-summary_table <- function(model) {
-  
-  # lcmm::summarytable() source code to calculate entropy
-  entropy <- function(x)
-  {
-    z <- log(as.matrix(x$pprob[,c(3:(x$ng+2))]))*as.matrix(x$pprob[,c(3:(x$ng+2))])
-    if(any(!is.finite(z)))
-    {
-      z[which(!is.finite(z))] <- 0
-    }
-    res <- 1+sum(z)/(x$ns*log(x$ng))
-    if(x$ng==1) res <- 1
-    return(res)
-  }
-  
-  # calculate entropy
-  e <- entropy(model)
-  
-  # class membership proportions
-  class_props <- model$pprob %>%
-    group_by(class) %>%
-    summarize(prop = n() / nrow(.) * 100) %>%
-    pivot_wider(names_from = class,
-                names_glue = '%class{class}',
-                values_from = prop)
-  
-  # combine all stats into summary 
-  data.frame(k = model$ng,
-             entropy = e,
-             conv = model$conv,
-             AIC = model$AIC,
-             BIC = model$BIC) %>%
-    cbind(class_props)
-  
-}
-
-# name each list of models with functional form
-linear_models <- set_names(linear_models, 'linear')
-quadratic_models <- set_names(quadratic_models, 'quadratic')
-cubic_models <- set_names(cubic_models, 'cubic')
-
-# create summary data frame for all models
-summaries <- rbind(
-  map_df(linear_models, summary_table, .id = 'type'),
-  map_df(quadratic_models, summary_table, .id = 'type'),
-  map_df(cubic_models, summary_table, .id = 'type')
-) %>%
-  group_by(type) %>%
-  # sort by ascending BIC
-  arrange(BIC, .by_group = TRUE)
+# create summary tables for lcmm objects
+check <- summarytable(linear_1, 
+                      linear_2,
+                      linear_3,
+                      linear_4,
+                      linear_5,
+                      quadratic_1,
+                      quadratic_2,
+                      quadratic_3,
+                      quadratic_4,
+                      quadratic_5,
+                      cubic_1,
+                      cubic_2,
+                      cubic_3,
+                      cubic_4,
+                      which = c('G', # number of assumed classes
+                                'conv', # convergence (1=yes, 2=no)
+                                'npm', # number of parameters
+                                'entropy', # 0-1, closer to 1 is better
+                                'AIC', 
+                                'BIC', 
+                                '%class'# proportion of each class based on c_ig
+                                )
+                      )
+  # move row names to column 'model' %>%
+  # group_by(type) %>%
+  # # sort by ascending BIC
+  # arrange(BIC, .by_group = TRUE)
 
 # plot trajectories ------------------------------------------------------------
 plot_trajectory <- function(model){
