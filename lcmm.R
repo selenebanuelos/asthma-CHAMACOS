@@ -54,7 +54,7 @@ analytic_sample <- asthma %>%
 # define function factory ------------------------------------------------------
 # function factory to create model-fitting functions with specified n-degree polynomial
 degree <- function(n # specified degree of polynomial
-                   ) {
+) {
   
   # ensure evaluation of n when inner function is executed
   force(n) # recommended in (Wickham, 2015)
@@ -62,7 +62,7 @@ degree <- function(n # specified degree of polynomial
   function(k, # assume k classes
            init_fit, # 1-class model with same fixed formula
            df = analytic_sample
-           ) {
+  ) {
     
     # send status message to console
     message("Currently estimating model with ", k, " classes...")
@@ -79,7 +79,7 @@ degree <- function(n # specified degree of polynomial
     
     # use gridsearch() to re-fit model using different random sets of inital
     # values to reduce odds of converging to local maximum
-    gridsearch(
+    model <- gridsearch(
       
       # fit latent class growth model
       lcmm(fixed = fixed_form,
@@ -92,9 +92,18 @@ degree <- function(n # specified degree of polynomial
       rep = 100, # try 100 different sets of random initial values
       maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
       minit = init_fit # 1-class model used to generate random initial values
-      )
-    }
+    ) 
+    
+    # replace the unevaluated expressions in stored in 'call' with formula objects
+    model$call$fixed <- fixed_form
+    model$call$mixture <- mix_form
+    # this is done to ensure the correct formula is used in predictY(), and not
+    # the "as.formula(paste0('current_asthma ~ poly(age_years, ',n, ', raw = TRUE)'))
+    # expression
+    
+    return(model)
   }
+}
 
 # linear LCG models ------------------------------------------------------------
 # save any console output to text file (warnings, messages, etc.)
@@ -191,7 +200,7 @@ save.image('data-processed/lcmm.RData')
 
 # post-fit summaries -----------------------------------------------------------
 # create summary tables for lcmm objects
-check <- summarytable(linear_1, 
+summaries <- summarytable(linear_1, 
                       linear_2,
                       linear_3,
                       linear_4,
@@ -230,6 +239,16 @@ plot_trajectory <- function(model){
   
 }
 
-plot_trajectory(linear_3)
+
+ages <- data.frame(age_years = c(9, 10, 12, 14, 16, 18))
+
+pred_class <- predictY(lin_2_alt_1, ages, var.time = 'age_years', draws = TRUE)
+
+plot(pred_class)
+
+
+
+plot_trajectory(linear_1)
+plot_trajectory(linear_2)
 plot_trajectory(quadratic_3)
 plot_trajectory(cubic_2)
