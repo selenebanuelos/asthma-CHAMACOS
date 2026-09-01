@@ -129,7 +129,7 @@ sink()
 # save any console output to text file (warnings, messages, etc.)
 sink('data-processed/lcmm-console-output.txt', append = TRUE)
 
-# fit a 1 class linear model to obtain starting values
+# fit a 1 class quadratic model to obtain starting values
 print('Fitting 2-degree model with 1 class') # print for console output log
 
 set.seed(123)
@@ -153,54 +153,39 @@ quadratic_5 <- quadratic_model(5, quadratic_1)
 # close the file connection
 sink()
 
+# cubic LCG models -------------------------------------------------------------
+# save any console output to text file (warnings, messages, etc.)
+sink('data-processed/lcmm-console-output.txt', append = TRUE)
 
-# fit a 1-class quadratic model for starting values
+# fit a 1 class cubic model to obtain starting values
+print('Fitting 3-degree model with 1 class') # print for console output log
+
+# fit a 1-class cubic model for starting values
 set.seed(123)
 cubic_1 <- lcmm(fixed = current_asthma ~ poly(age_years, 3, raw = TRUE),
                 # mixture not specified for 1 class models
                 subject = 'newid',
                 link = 'thresholds', # binary outcome
                 ng = 1, # 1 class model
-                data = curr_asth_data,
+                data = analytic_sample,
                 maxiter = 1000
 )
 
-set.seed(123)
-cubic_2 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ poly(age_years, 3, raw = TRUE),
-       mixture = ~ poly(age_years, 3, raw = TRUE),
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 2, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = cubic_1 # 1-class model used to generate random initial values
-)
+# create function that fits cubic model (3-degree polynomial)
+cubic_model <- degree(3)
 
-set.seed(123)
-cubic_3 <- gridsearch(
-  
-  # fit latent class growth model
-  lcmm(fixed = current_asthma ~ poly(age_years, 3, raw = TRUE),
-       mixture = ~ poly(age_years, 3, raw = TRUE),
-       subject = 'newid',
-       link = 'thresholds', # binary outcome
-       ng = 3, # assume k classes
-       data = curr_asth_data
-  ),
-  
-  rep = 100, # try 100 different sets of random initial values
-  maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
-  minit = cubic_1 # 1-class model used to generate random initial values
-)
+# fit linear 2-5 class models
+cubic_2 <- cubic_model(k = 2, init_fit = cubic_1)
+cubic_3 <- cubic_model(3, cubic_1)
+cubic_4 <- cubic_model(4, cubic_1)
 
+# pick up here
+# save any console output to text file (warnings, messages, etc.)
+sink('data-processed/lcmm-console-output.txt', append = TRUE)
+cubic_5 <- cubic_model(5, cubic_1)
 
-# refit desired models, having trouble plotting from list of models
+# close the file connection
+sink()
 
 # save fitted models
 save.image('data-processed/lcmm.RData')
