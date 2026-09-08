@@ -7,6 +7,7 @@
 library(readstata13)
 library(dplyr)
 library(lcmm)
+library(ggplot2)
 options(scipen = 999)
 
 # import data ------------------------------------------------------------------
@@ -45,10 +46,15 @@ plot_trajectory(quadratic_2)
 plot_trajectory(cubic_1)
 plot_trajectory(cubic_2)
 
-# LCA: plot trajectories -------------------------------------------------------
-# may want to call them 'profiles' since they're not really modeled as
-# longitudinal growth outcomes, and therefore, not continuous trajectories
+# LCGA: assign class labels ----------------------------------------------------
+# get vector of predicted class membership for 3-class linear model
+class_lcga_k3 <- predictClass(linear_3, newdata = curr_asth_data) %>%
+  # label classes (based on trajectory plot)
+  mutate(class_label_lcga = case_when(class == 1 ~ 'never/infrequent',
+                                      class == 2 ~ 'persistent',
+                                      class == 3 ~ 'late onset'))
 
+# LCA: plot trajectories -------------------------------------------------------
 # function that gets class-conditional outcome probabilities from LCA models
 get_probs <- function(model) {
   
@@ -104,27 +110,28 @@ spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome pr
 
 # LCA: assign class labels -----------------------------------------------------
 # create class labels for 2 & 3-class models
-class_labels <- data.frame(newid = analytic_sample$newid,
+lca_labels <- data.frame(newid = lca_analytic_sample$newid,
                            # vectors of predicted class membership from 2 & 3-class models
                            pred_class_k2 = models[[2]]$predclass,
                            pred_class_k3 = models[[3]]$predclass
-) %>%
+                           ) %>%
   mutate(
     # assign labels for 2-class model based on trajectory patterns
-    class_label_k2 = case_when(pred_class_k2 == 1 ~ 'never/infrequent',
+    class_label_2 = case_when(pred_class_k2 == 1 ~ 'never/infrequent',
                                pred_class_k2 == 2 ~ 'persistent'),
     # assign labels for 3-class model based on trajectory patterns
-    class_label_k3 = case_when(pred_class_k3 == 1 ~ 'persistent',
+    class_label_3 = case_when(pred_class_k3 == 1 ~ 'persistent',
                                pred_class_k3 == 2 ~ 'never/infrequent',
-                               pred_class_k3 == 3 ~ 'late onset')
-  )
-
-# get vector of predicted class membership for 3-class linear model
-class_lcga_k3 <- predictClass(linear_3, newdata = curr_asth_data) %>%
-  # label classes (based on trajectory plot)
-  mutate(class_label_lcga = case_when(class == 1 ~ 'never/infrequent',
-                                 class == 2 ~ 'persistent',
-                                 class == 3 ~ 'late onset'))
+                               pred_class_k3 == 3 ~ 'late onset'),
+    # specify these classes were obtained using LCA for downstream merging
+    method = 'LCA') %>%
+  # remove class numeric IDs, keeping only class labels
+  dplyr::select(-contains('pred_class')) %>%
+  # create new column with number of assumed classes
+  pivot_longer(cols = contains('class_label'),
+               names_pattern = '(class_label)_(.)',
+               names_to = c('.value', 'num_classes')
+               )
 
 # Data wrangling ---------------------------------------------------------------
 # do some reformatting to prepare for LCA

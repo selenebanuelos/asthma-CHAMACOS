@@ -72,7 +72,7 @@ keep_ids <- current_asthma %>%
   unique()
   
 # create analytic sample df, with participants with >1 timepoint
-analytic_sample <- filter(current_asthma, newid %in% keep_ids)
+lca_analytic_sample <- filter(current_asthma, newid %in% keep_ids)
 
 # Latent class analysis --------------------------------------------------------
 # create formula object with current_asthma vars at each timepoint as indicators
@@ -80,7 +80,7 @@ analytic_sample <- filter(current_asthma, newid %in% keep_ids)
 ind_formula <- as.formula(
   paste(
     "cbind(", 
-    paste(grep('current_asthma', names(analytic_sample), value = TRUE),
+    paste(grep('current_asthma', names(lca_analytic_sample), value = TRUE),
           collapse = ","),
     ") ~ 1")
 )
@@ -98,7 +98,7 @@ models <- lapply(1:5, function(k)
   
   # estimate model
   poLCA(formula = ind_formula,
-        data = analytic_sample,
+        data = lca_analytic_sample,
         nclass = k,
         nrep = 1000, # estimate model 1,000 times to search for global maximum
         maxiter = 5000,
