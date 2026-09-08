@@ -11,18 +11,18 @@ options(scipen = 999)
 
 # import data ------------------------------------------------------------------
 # load LCA objects
-load('data-processed/poLCA.RData')
+load('data-processed/lca-current-asthma.RData')
 
 # load LCGA objects
-load('data-processed/lcmm.RData')
+load('data-processed/lcmm-new.RData')
 
 # asthma-related data
 asthma <- read.dta13('data-raw/de_la_Rosa_07.dta',
                      nonint.factors = TRUE,
                      generate.factors = TRUE)
 
-# move this section to lcmm.R script later -------------------------------------
-# plot trajectories
+# LCGA: plot trajectories ------------------------------------------------------
+# plotting function
 plot_trajectory <- function(model){
   
   ages <- data.frame(age_years = c(9, 10, 12, 14, 16, 18))
@@ -33,40 +33,19 @@ plot_trajectory <- function(model){
   
 }
 
-# linear models
+# plot trajectories for all models that converged
+plot_trajectory(linear_1)
 plot_trajectory(linear_2)
-plot_trajectory(linear_3) # lowest BIC
+plot_trajectory(linear_3)
 plot_trajectory(linear_4)
 
-summaryplot(linear_1,
-            linear_2,
-            linear_3,
-            linear_4, 
-            linear_5,
-            which = c('conv', 'AIC', 'BIC', 'entropy')
-)
-
-# quadratic models
 plot_trajectory(quadratic_1)
-plot_trajectory(quadratic_3)
+plot_trajectory(quadratic_2)
 
-summaryplot(quadratic_1,
-            quadratic_3,
-            which = c('conv', 'AIC', 'BIC', 'entropy')
-)
-            
-
-# cubic models
 plot_trajectory(cubic_1)
 plot_trajectory(cubic_2)
-plot_trajectory(cubic_3)
 
-summaryplot(cubic_1,
-            cubic_2,
-            cubic_3,
-            which = c('conv', 'AIC', 'BIC', 'entropy')
-)
-
+# LCA: plot trajectories -------------------------------------------------------
 # get vector of predicted class membership for 3-class linear model
 class_lcga_k3 <- predictClass(linear_3, newdata = curr_asth_data) %>%
   # label classes (based on trajectory plot)

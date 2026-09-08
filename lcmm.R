@@ -87,10 +87,11 @@ degree <- function(n # specified degree of polynomial
            subject = 'newid',
            link = 'thresholds', # binary outcome
            ng = k,
-           data = df),
+           data = df,
+           maxiter = 1000),
       
       rep = 100, # try 100 different sets of random initial values
-      maxiter = 1000, # 1000 iterations max (100 iterations not enough for cubic)
+      maxiter = 1000, # 1000 iterations max
       minit = init_fit # 1-class model used to generate random initial values
     ) 
     
@@ -187,16 +188,14 @@ cubic_2 <- cubic_model(k = 2, init_fit = cubic_1)
 cubic_3 <- cubic_model(3, cubic_1)
 cubic_4 <- cubic_model(4, cubic_1)
 
-# pick up here
-# save any console output to text file (warnings, messages, etc.)
-sink('data-processed/lcmm-console-output.txt', append = TRUE)
-cubic_5 <- cubic_model(5, cubic_1)
 
 # close the file connection
 sink()
 
 # save fitted models
 save.image('data-processed/lcmm.RData')
+
+cubic_5 <- cubic_model(5, cubic_1)
 
 # post-fit summaries -----------------------------------------------------------
 # create summary tables for lcmm objects
@@ -213,7 +212,8 @@ summaries <- summarytable(linear_1,
                       cubic_1,
                       cubic_2,
                       cubic_3,
-                      cubic_4,
+                      #cubic_4,
+                      #cubic_5,
                       which = c('G', # number of assumed classes
                                 'conv', # convergence (1=yes, 2=no)
                                 'npm', # number of parameters
@@ -222,33 +222,16 @@ summaries <- summarytable(linear_1,
                                 'BIC', 
                                 '%class'# proportion of each class based on c_ig
                                 )
-                      )
-  # move row names to column 'model' %>%
-  # group_by(type) %>%
-  # # sort by ascending BIC
-  # arrange(BIC, .by_group = TRUE)
+                      ) %>%
+  as.data.frame(.) %>%
+  # move row names (contains model name) to column
+  tibble::rownames_to_column('model') %>%
+  # strip off suffix from model names, leaving model type (linear,quadratic,etc)
+  mutate(model = str_remove(model, '_.*$')) %>%
+  # sort each model type by convergance status (yes -> no) then ascending BIC
+  group_by(model) %>%
+  arrange(conv, BIC, .by_group = TRUE)
 
-# plot trajectories ------------------------------------------------------------
-plot_trajectory <- function(model){
-  
-  ages <- data.frame(age_years = c(9, 10, 12, 14, 16, 18))
-  
-  pred_class <- predictY(model, ages, var.time = 'age_years', draws = TRUE)
-  
-  plot(pred_class)
-  
-}
-
-
-ages <- data.frame(age_years = c(9, 10, 12, 14, 16, 18))
-
-pred_class <- predictY(lin_2_alt_1, ages, var.time = 'age_years', draws = TRUE)
-
-plot(pred_class)
-
-
-
-plot_trajectory(linear_1)
-plot_trajectory(linear_2)
-plot_trajectory(quadratic_3)
-plot_trajectory(cubic_2)
+# output -----------------------------------------------------------------------
+# save model summaries
+write.csv(summaries, 'data-processed/fit-stats-lcmm.csv', row.names = FALSE)
