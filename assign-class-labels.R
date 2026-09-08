@@ -46,6 +46,79 @@ plot_trajectory(cubic_1)
 plot_trajectory(cubic_2)
 
 # LCA: plot trajectories -------------------------------------------------------
+# may want to call them 'profiles' since they're not really modeled as
+# longitudinal growth outcomes, and therefore, not continuous trajectories
+
+# function that gets class-conditional outcome probabilities from LCA models
+get_probs <- function(model) {
+  
+  # class-conditional outcome probabilities
+  probs <- model$probs
+  
+  # reformat data for plotting
+  reformat <- map_df(probs, # class-conditional outcome probabilities
+                     function(m) as.data.frame(m) %>% 
+                       mutate(class = str_extract(row.names(.), '[0-9]+')), 
+                     .id = 'age') %>%
+    # create column with number of classes assumed (k) for model
+    mutate(k = max(class)) %>%
+    # reformat age variable values from "current_asthma_*Y" to just digits
+    mutate(age = str_extract(age, '[0-9]+'),
+           age = factor(age,levels = c('9', '10', '12', '14', '16', '18')))
+  
+}
+
+# define custom labels for facets in plot below
+facet_names <- c('1' = '1 Class',
+                 '2' = '2 Classes',
+                 '3' = '3 Classes',
+                 '4' = '4 Classes',
+                 '5' = '5 Classes')
+
+# visualize class profiles of all models in one plot
+spaghetti_all <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
+  ggplot(aes(x = age, # show trend over ages
+             y = `Pr(1)`, # plot probability of having current asthma as outcome
+             color = class # show each class in different color
+  )) +
+  geom_line(aes(group = class), size = 1) +
+  facet_wrap(vars(k), labeller = as_labeller(facet_names)) +
+  labs(y = 'Probability of current asthma') +
+  theme_minimal() +
+  theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
+
+# visualize class profiles of k=3 model only
+spaghetti_k3 <- map_df(models, get_probs) %>% # get class-conditional outcome probabilities
+  # keep only data from k=4 model
+  filter(k == 3) %>%
+  # make spaghetti plot
+  ggplot(aes(x = age, # show trend over ages
+             y = `Pr(1)`, # plot probability of having current asthma as outcome
+             color = class # show each class in different color
+  )) +
+  geom_line(aes(group = class), size = 1) +
+  labs(y = 'Probability of current asthma',
+       title = 'LCA with 3 Classes') +
+  theme_minimal() +
+  theme(panel.border = element_rect(color = 'black', fill = NA, linewidth = 0.5))
+
+# LCA: assign class labels -----------------------------------------------------
+# create class labels for 2 & 3-class models
+class_labels <- data.frame(newid = analytic_sample$newid,
+                           # vectors of predicted class membership from 2 & 3-class models
+                           pred_class_k2 = models[[2]]$predclass,
+                           pred_class_k3 = models[[3]]$predclass
+) %>%
+  mutate(
+    # assign labels for 2-class model based on trajectory patterns
+    class_label_k2 = case_when(pred_class_k2 == 1 ~ 'never/infrequent',
+                               pred_class_k2 == 2 ~ 'persistent'),
+    # assign labels for 3-class model based on trajectory patterns
+    class_label_k3 = case_when(pred_class_k3 == 1 ~ 'persistent',
+                               pred_class_k3 == 2 ~ 'never/infrequent',
+                               pred_class_k3 == 3 ~ 'late onset')
+  )
+
 # get vector of predicted class membership for 3-class linear model
 class_lcga_k3 <- predictClass(linear_3, newdata = curr_asth_data) %>%
   # label classes (based on trajectory plot)
@@ -182,3 +255,11 @@ comparison <- dplyr::select(classified_k3, newid, class_label) %>%
 
 # output -----------------------------------------------------------------------
 write.csv(comparison, 'data-processed/classification_k3.csv', row.names = FALSE)
+
+
+# LCA trajectories
+ggsave('figures/spaghetti-all-lca.png', spaghetti_all)
+ggsave('figures/spaghetti-k3-lca.png', spaghetti_k3)
+
+# save LCA class labels
+write.csv(class_labels, 'data-processed/class-labels-lca.csv', row.names = FALSE)
