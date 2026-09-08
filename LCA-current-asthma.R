@@ -189,10 +189,3 @@ lapply(models, compare_sizes)
 # output -----------------------------------------------------------------------
 # create csv with fit diagnostics
 write.csv(model_fit, 'data-processed/fit-stats-lca.csv', row.names = FALSE)
-
-# trajectories
-ggsave('figures/spaghetti-all-lca.png', spaghetti_all)
-ggsave('figures/spaghetti-k3-lca.png', spaghetti_k3)
-
-# save class labels
-write.csv(class_labels, 'data-processed/class-labels-lca.csv', row.names = FALSE)
